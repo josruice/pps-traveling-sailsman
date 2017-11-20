@@ -17,14 +17,14 @@ public class Player extends sail.sim.Player {
 
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
-        // you don't have to use seed unless you want it to
+        // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
         gen = new Random(seed);
-        this.windDirection = windDirection;
-        initialLocation = new Point(5.0, 5.0);
-//        initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+        initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
         double speed = Simulator.getSpeed(initialLocation, windDirection);
         this.numTargets = t;
+        this.windDirection = windDirection;
+        // initialLocation = new Point(5.0, 5.0); // Use the middle point as initial location.
         return initialLocation;
     }
 
@@ -37,23 +37,36 @@ public class Player extends sail.sim.Player {
     @Override
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
         this.currentLocation = groupLocations.get(id);
-        Point destination = null;
-
-        if (visitedTargets == null) {
-            destination = targets.get(0);
-        } else if (visitedTargets.get(id).size() == targets.size()) {
-            //this is if finished visiting all
-            destination = initialLocation;
-        } else {
-            //pick a target
-            int next = 0;
-            for(; visitedTargets.get(id).contains(next); ++next);
-            destination = targets.get(next);
-        }
-
-        return computeNextDirection(destination, timeStep);
+        return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
     }
 
+    // Applies the Greedy Strategy to Find the next Point
+    public Point greedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+        Point myCurrentLocation = groupLocations.get(id);
+        int nTargets = targets.size();
+        Set<Integer> unVisitedTargets = new HashSet<Integer>();
+        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be out next target.
+
+        for (int i = 0; i < nTargets; i ++){
+            if (visitedTargets == null || !visitedTargets.get(id).contains(i))
+                unVisitedTargets.add(i);
+        }
+
+        double minTime = Double.MAX_VALUE;
+        for (int unvisitedTargetPoint : unVisitedTargets){
+            double distance = Point.getDistance(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
+            Point direction = Point.getDirection(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
+            double speed = Simulator.getSpeed(direction, windDirection);
+            double time = distance/speed;
+
+            if (time < minTime){
+                minTime = time;
+                nextTarget = targets.get(unvisitedTargetPoint);
+            }
+        }
+
+        return computeNextDirection(nextTarget, timeStep);
+    }
 
     private Point computeNextDirection(Point target, double timeStep) {
         Point directionToTarget = Point.getDirection(this.currentLocation, target);
@@ -113,8 +126,8 @@ public class Player extends sail.sim.Player {
     }
 
     /**
-     * visitedTargets.get(i) is a set of targets that the ith player has visited.
-     */
+    * visitedTargets.get(i) is a set of targets that the ith player has visited.
+    */
     @Override
     public void onMoveFinished(List<Point> groupLocations, Map<Integer, Set<Integer>> visitedTargets) {
         this.visitedTargets = visitedTargets;
