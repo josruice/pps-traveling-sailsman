@@ -64,26 +64,38 @@ public class Player extends sail.sim.Player {
 
     private Point findBestDirection(Point leftDirection, Point rightDirection, Point target, int numSteps,
                                     double timeStep) {
-        double minDistance = Double.POSITIVE_INFINITY;
-        Point minDistanceDirection = null;
+        // First, check if the target is reachable in one time step from our current position.
+        double currentDistanceToTarget = Point.getDistance(this.currentLocation, target);
+        Point directionToTarget = Point.getDirection(this.currentLocation, target);
+        double speedToTarget = Simulator.getSpeed(directionToTarget, this.windDirection);
+        double distanceWeCanTraverse = speedToTarget * timeStep;
+        double distanceTo10MeterAroundTarget = currentDistanceToTarget-0.01;
+        if (distanceWeCanTraverse > distanceTo10MeterAroundTarget) {
+            return directionToTarget;
+        }
+
+        // If that is not the case, choose the direction that will get us to a point where the time to reach
+        // the target is minimal, if going directly to the target.
+        double minTimeToTarget = Double.POSITIVE_INFINITY;
+        Point minTimeToTargetDirection = null;
 
         double totalRadians = Point.angleBetweenVectors(leftDirection, rightDirection);
         double radiansStep = totalRadians / (double) numSteps;
-        double distance;
-        Point direction;
-        Point expectedPosition;
         for (double i = 0.0; i < totalRadians; i+=radiansStep) {
-            direction = Point.rotateCounterClockwise(rightDirection, i);
-            expectedPosition = computeExpectedPosition(direction, timeStep);
-            distance = Point.getDistance(expectedPosition, target);
+            Point direction = Point.rotateCounterClockwise(rightDirection, i);
+            Point expectedPosition = computeExpectedPosition(direction, timeStep);
+            Point nextDirection = Point.getDirection(expectedPosition, target);
+            double distance = Point.getDistance(expectedPosition, target);
+            double speed = Simulator.getSpeed(nextDirection, this.windDirection);
+            double timeToTarget = distance / speed;
 
-            if (distance < minDistance) {
-                minDistanceDirection = direction;
-                minDistance = distance;
+            if (timeToTarget < minTimeToTarget) {
+                minTimeToTargetDirection = direction;
+                minTimeToTarget = timeToTarget;
             }
         }
 
-        return minDistanceDirection;
+        return minTimeToTargetDirection;
     }
 
     private Point computeExpectedPosition(Point moveDirection, double timeStep) {
