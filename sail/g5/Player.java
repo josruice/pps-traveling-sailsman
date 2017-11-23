@@ -7,13 +7,18 @@ import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
-    Map<Integer, Set<Integer>> visitedTargets;
+    Map<Integer, Set<Integer>> visitedTargets; // For every player, store which targets he has visited.
+    Map<Integer, Set<Integer>> unvisitedTargets; // For every player, store which target he has NOT visited.
+    Map<Integer, Set<Integer>> playerVisitsByTarget; // For every target, store which players have visited it (been received).
+    Set<Integer> ourUnvisitedTargets;
     Random gen;
     int id;
     int numTargets;
+    int numPlayers;
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
+    final String STRATEGY = "greedy"; // One of: greedy, weightedGreedy
 
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
@@ -32,40 +37,87 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> groupLocations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
+        this.numPlayers = groupLocations.size();
+
+        // Initialize unvisited targets by player map.
+        this.unvisitedTargets = new HashMap<Integer, Set<Integer>>();
+        for (int playerId = 0; playerId < this.numPlayers; ++playerId) {
+            Set<Integer> playerUnvisited = new HashSet<Integer>();
+            for (int i = 0; i < this.numTargets; ++i) {
+                playerUnvisited.add(i);
+            }
+            this.unvisitedTargets.put(playerId, playerUnvisited);
+        }
+        this.ourUnvisitedTargets = this.unvisitedTargets.get(this.id);
+
+        // Initialize player visits by target map.
+        this.playerVisitsByTarget = new HashMap<Integer, Set<Integer>>();
+        for (int targetId = 0; targetId < this.numTargets; ++targetId) {
+            Set<Integer> playerVisits = new HashSet<Integer>();
+            this.playerVisitsByTarget.put(targetId, playerVisits);
+        }
     }
 
     @Override
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
         this.currentLocation = groupLocations.get(id);
-        return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+        switch (STRATEGY) {
+            case "greedy":
+                return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "weightedGreedy":
+                return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            default:
+                System.err.println("Invalid strategy "+STRATEGY+" chosen");
+                return new Point(0,0);
+        }
     }
 
-    // Applies the Greedy Strategy to Find the next Point
-    public Point greedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-        Point myCurrentLocation = groupLocations.get(id);
-        int nTargets = targets.size();
-        Set<Integer> unVisitedTargets = new HashSet<Integer>();
-        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be out next target.
+    public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be our next target.
 
-        for (int i = 0; i < nTargets; i ++){
-            if (visitedTargets == null || !visitedTargets.get(id).contains(i))
-                unVisitedTargets.add(i);
+        // Let's get the maximum weight unvisited target according to the following formula:
+        //  targetWeight = targetRemaningScore / timeToTarget;
+
+        double maxWeight = Double.NEGATIVE_INFINITY;
+        Point maxWeightTarget = this.initialLocation;
+        for (int targetId : this.ourUnvisitedTargets) {
+            double time = computeEstimatedTimeToTarget(targets.get(targetId));
+            int score = computeRemainingScore(targetId);
+            double weight = score / time;
+            if (weight > maxWeight) {
+                maxWeight = weight;
+                maxWeightTarget = targets.get(targetId);
+            }
         }
 
-        double minTime = Double.MAX_VALUE;
-        for (int unvisitedTargetPoint : unVisitedTargets){
-            double distance = Point.getDistance(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
-            Point direction = Point.getDirection(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
-            double speed = Simulator.getSpeed(direction, windDirection);
-            double time = distance/speed;
+        return computeNextDirection(maxWeightTarget, timeStep);
+    }
 
-            if (time < minTime){
+    // Applies the Greedy Strategy to choose the next target, only considering the time to reach it.
+    public Point greedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be our next target.
+
+        double minTime = Double.MAX_VALUE;
+        for (int unvisitedTargetPoint : this.ourUnvisitedTargets) {
+            double time = computeEstimatedTimeToTarget(targets.get(unvisitedTargetPoint));
+            if (time < minTime) {
                 minTime = time;
                 nextTarget = targets.get(unvisitedTargetPoint);
             }
         }
 
         return computeNextDirection(nextTarget, timeStep);
+    }
+
+    private int computeRemainingScore(int targetId) {
+        return this.numPlayers - this.playerVisitsByTarget.get(targetId).size();
+    }
+
+    private double computeEstimatedTimeToTarget(Point target) {
+        double distance = Point.getDistance(this.currentLocation, target);
+        Point direction = Point.getDirection(this.currentLocation, target);
+        double speed = Simulator.getSpeed(direction, windDirection);
+        return distance/speed;
     }
 
     private Point computeNextDirection(Point target, double timeStep) {
@@ -130,6 +182,19 @@ public class Player extends sail.sim.Player {
     */
     @Override
     public void onMoveFinished(List<Point> groupLocations, Map<Integer, Set<Integer>> visitedTargets) {
+        // Let's use this information to prepare some convenient data structures:
+        //  - For every player, unvisited targets, with a special variable pointing to ours.
+        //  - For every target, players that have visited it. This will help compute potential score easily.
         this.visitedTargets = visitedTargets;
+
+        for (Integer playerId : visitedTargets.keySet()) {
+            Set<Integer> playerVisited = this.visitedTargets.get(playerId);
+            Set<Integer> playerUnvisited = this.unvisitedTargets.get(playerId);
+            playerUnvisited.removeAll(playerVisited);
+
+            for (Integer target : playerVisited) {
+                this.playerVisitsByTarget.get(target).add(playerId);
+            }
+        }
     }
 }
