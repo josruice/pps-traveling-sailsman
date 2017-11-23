@@ -18,7 +18,7 @@ public class Player extends sail.sim.Player {
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
-    final String STRATEGY = "greedy"; // One of: greedy, weightedGreedy
+    final String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy
 
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
@@ -73,17 +73,17 @@ public class Player extends sail.sim.Player {
     }
 
     public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be our next target.
-
         // Let's get the maximum weight unvisited target according to the following formula:
-        //  targetWeight = targetRemaningScore / timeToTarget;
+        //  targetWeight = (targetRemainingScore * distanceFromNonVisitedPlayers) / timeToTarget;
 
         double maxWeight = Double.NEGATIVE_INFINITY;
-        Point maxWeightTarget = this.initialLocation;
+        Point maxWeightTarget = this.initialLocation;  // If no unvisited targets, initial location will be our next target.
         for (int targetId : this.ourUnvisitedTargets) {
-            double time = computeEstimatedTimeToTarget(targets.get(targetId));
+            double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
             int score = computeRemainingScore(targetId);
-            double weight = score / time;
+            double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+
+            double weight = (score * othersTime) / ourTime;
             if (weight > maxWeight) {
                 maxWeight = weight;
                 maxWeightTarget = targets.get(targetId);
@@ -109,13 +109,32 @@ public class Player extends sail.sim.Player {
         return computeNextDirection(nextTarget, timeStep);
     }
 
+    private double computeUnvisitedPlayersTimeTo(List<Point> groupLocations, int targetId) {
+        double distance = 0.0;
+        Point target = this.targets.get(targetId);
+        for (int playerId = 0; playerId < this.numPlayers; ++playerId) {
+            if (playerId == this.id) continue; // Skip our own.
+            if (!this.playerVisitsByTarget.get(targetId).contains(playerId)) {
+                // This means that this player hasn't visited this target yet, so
+                // compute her time to target.
+                Point player = groupLocations.get(playerId);
+                distance += computeEstimatedTimeToTarget(player, target);
+            }
+        }
+        return distance;
+    }
+
     private int computeRemainingScore(int targetId) {
         return this.numPlayers - this.playerVisitsByTarget.get(targetId).size();
     }
 
     private double computeEstimatedTimeToTarget(Point target) {
-        double distance = Point.getDistance(this.currentLocation, target);
-        Point direction = Point.getDirection(this.currentLocation, target);
+        return computeEstimatedTimeToTarget(this.currentLocation, target);
+    }
+
+    private double computeEstimatedTimeToTarget(Point player, Point target) {
+        double distance = Point.getDistance(player, target);
+        Point direction = Point.getDirection(player, target);
         double speed = Simulator.getSpeed(direction, windDirection);
         return distance/speed;
     }
