@@ -1,5 +1,5 @@
 # PPS 2017 - Traveling Sailsman
-Player code authors (group 2):
+Player code authors (group 5):
 - Shreyas Mundhra
 - Srinidhi Raghvan
 - Tahmid Munat
