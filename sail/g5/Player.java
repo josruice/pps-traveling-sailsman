@@ -147,8 +147,20 @@ public class Player extends sail.sim.Player {
         	return unitDirection;    		
     	}
     	
-    	int targetIndex = path.get(0);    	
-    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
+    	int targetIndex = path.get(0);
+    	Point target = targets.get(targetIndex);
+    	Point nextTarget = initialLocation;
+    	if(path.size() >= 2){
+        	int nextTargetIndex = path.get(1);
+        	nextTarget = targets.get(nextTargetIndex);
+    	}
+    	
+    	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
+    	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
+    	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
+    	
+    	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
+//    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
     	Point unitDirection = Point.getUnitVector(direction);
     	return unitDirection;
     }
