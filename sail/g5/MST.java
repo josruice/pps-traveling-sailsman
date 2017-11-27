@@ -63,9 +63,9 @@ public class MST
 		}
 
 		// Always include first 1st vertex in MST.
-		key[0] = 0;	 // Make key 0 so that this vertex is
+		key[V-1] = 0;	 // Make key 0 so that this vertex is
 						// picked as first vertex
-		parent[0] = -1; // First node is always root of MST
+		parent[V-1] = -1; // Last node is always root of MST
 
 		// The MST will have V vertices
 		for (int count = 0; count < V-1; count++)

@@ -65,17 +65,25 @@ public class Player extends sail.sim.Player {
         
         
         if(STRATEGY == "mst"){
+        	ArrayList<Point> targetsClone = new ArrayList<Point>();
+        	for(Point target: targets){
+        		targetsClone.add(target);
+        	}
+        	targetsClone.add(initialLocation);
+        	
 	        mst = new MST();
-	        graph = new double[numTargets][numTargets];
-	        for(int i = 0; i < numTargets; i++){
-	        	for(int j = 0; j < numTargets; j++){
-	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
+	        graph = new double[numTargets + 1][numTargets + 1];
+	        for(int i = 0; i < numTargets + 1; i++){
+	        	for(int j = 0; j < numTargets + 1; j++){
+	        		graph[i][j] = computeEstimatedTimeToTarget(targetsClone.get(i), targetsClone.get(j));
 	        	}
 	        }
 	        int[] parents = mst.primMST(graph);
 	        buildTree(parents);
 	        path = new ArrayList<Integer>();
 	        tree.preorder(path);
+	        
+	        path.remove(0);
         }
     }
 
