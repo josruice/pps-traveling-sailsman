@@ -92,7 +92,7 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.lineTo(ox + w/4, oy + h/2);
         ctx.lineTo(ox + w/2, oy + h/4);
         ctx.closePath();
-        ctx.strokeStyle = colors[i%numcols];
+        ctx.strokeStyle = "black";
         ctx.fillStyle = colors[i%numcols];
         ctx.lineWidth = 3;
         ctx.stroke();
@@ -113,9 +113,9 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.fillStyle = colors[i % numcols];
         ctx.fill();
 
-        ctx.font = "15px Arial";
+        ctx.font = "14px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.strokeStyle = "black";
         ctx.strokeText(i+1,        min_x + (max_x - min_x) * xcoords[i]/10 + 5,min_y + (max_y - min_y) * ycoords[i]/10- 5);
         
@@ -260,7 +260,7 @@ function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx
     for(var i = 0 ; i < n ; ++ i) {
         ctx.font = "32px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 4;
         ctx.strokeStyle = colors[i];
         ctx.strokeText(groups[i] + ": " + scores[i],        min_x, min_y + 30*(3+i));
         // ctx.strokeText("CPU time: " + cpu + " s", min_x, min_y + 90);
@@ -323,9 +323,7 @@ function process(data)
     var maxy = 650;
     draw_grid(300, 50, 900, 650,1, 1, "black");
     // draw for 1st player
-    //var colors = ["#000",  "#333", "#666", "#999", "green","#CCC"];
-    var colors = ["orange",  "purple", "green", "darkblue", "black", "lightseagreen"];
-    //var colors = ["orange",  "purple", "green", "darkblue", "yellow","lightseagreen"];
+    var colors = ["orange",  "purple", "green", "darkblue", "black","lightseagreen"];
 
     draw_landmarks(minx, miny, maxx, maxy, t, tx, ty, "red");
     draw_dots(minx, miny, maxx, maxy, n, initplayerx, initplayery, 1, ["black"], true);

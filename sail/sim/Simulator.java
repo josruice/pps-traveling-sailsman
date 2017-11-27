@@ -57,7 +57,7 @@ public class Simulator {
   // move fasssstt
   public static double getSpeed(Point p, Point wind_direction) {
     if(Point.getNorm(p)==0) return 0;
-    double angle = Point.angleBetweenVectors(p, wind_direction);
+    double angle = Point.angleBetweenVectors(p, wind_direction) + Math.PI;
     double x = 2.5 * Math.cos(angle) - 0.5;
     double y = 5 * Math.sin(angle);
     return Math.sqrt((x)*(x) + (y)*(y));
@@ -275,7 +275,7 @@ public class Simulator {
         List<Integer> groups_on_this = new ArrayList<>();
         for (int j = 0 ; j < numgroups; ++j) {
           if(!visited_set.get(j).contains(i) && 
-            Point.getDistance(target_locations.get(i), player_locations.get(j)) < 6*DT && 
+            Point.getDistance(target_locations.get(i), player_locations.get(j)) < 0.01 + 6*DT && 
             checkCrossedInterpolation(
               target_locations.get(i), 
               player_locations.get(j), 
@@ -317,7 +317,7 @@ public class Simulator {
           }
           int cnt = y - x;
           while(x < y) {
-            scores[groups_on_this.get(x)] += totp/cnt;
+            scores[groups_on_this.get(x)] += totp/(double)cnt;
             ++x;
             vis_count[i]+=1;
           }
@@ -334,6 +334,7 @@ public class Simulator {
               newLocations.get(i)
           )
         ) {
+          System.out.println("Finisher was "+groups[i]);
           finished = true;
         }
       }

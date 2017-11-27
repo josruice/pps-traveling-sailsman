@@ -17,8 +17,7 @@ public class Player extends sail.sim.Player {
         // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
         gen = new Random(seed);
-//        initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
-        initial = new Point(5.0, 5.0);
+        initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
         double speed = Simulator.getSpeed(initial, wind_direction);
         return initial;
     }
