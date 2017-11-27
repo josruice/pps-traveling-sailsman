@@ -18,8 +18,14 @@ public class Player extends sail.sim.Player {
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
-    final String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy
+    final String STRATEGY = "mst"; // One of: greedy, weightedGreedy, mst
+    
+    MST mst;
+    double[][] graph;
+    Tree tree;
+    ArrayList<Integer> path;
 
+    
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
         // you don't have to use seed unless you want it to 
@@ -56,6 +62,21 @@ public class Player extends sail.sim.Player {
             Set<Integer> playerVisits = new HashSet<Integer>();
             this.playerVisitsByTarget.put(targetId, playerVisits);
         }
+        
+        
+        if(STRATEGY == "mst"){
+	        mst = new MST();
+	        graph = new double[numTargets][numTargets];
+	        for(int i = 0; i < numTargets; i++){
+	        	for(int j = 0; j < numTargets; j++){
+	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
+	        	}
+	        }
+	        int[] parents = mst.primMST(graph);
+	        buildTree(parents);
+	        path = new ArrayList<Integer>();
+	        tree.preorder(path);
+        }
     }
 
     @Override
@@ -66,10 +87,62 @@ public class Player extends sail.sim.Player {
                 return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
             case "weightedGreedy":
                 return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "mst":
+            	return mstMove(groupLocations, id, timeStep, timeRemainingMs);
             default:
                 System.err.println("Invalid strategy "+STRATEGY+" chosen");
                 return new Point(0,0);
         }
+    }
+    
+    public void buildTree(int[] parents){    	
+    	tree = new Tree();
+    	int rootIndex = findRootIndexOfMST(parents);
+    	tree.root = new Node(rootIndex);
+//    	tree.root = new Node(targets.get(rootIndex));
+    	tree.root.children = findChildren(rootIndex, parents);    	
+    }
+    
+    public int findRootIndexOfMST(int[] parents){
+    	for(int i = 0; i < numTargets; i++){
+    		if(parents[i] == -1){
+    			return i;
+    		}
+    	}
+    	return -1;
+    }
+    
+    public ArrayList<Node> findChildren(int rootIndex, int[] parents){
+    	ArrayList<Node> children = null;
+    	
+    	for(int i = 0; i < parents.length; i++){
+    		if(parents[i] == rootIndex){
+    			Node child = new Node(i);
+    			child.children = findChildren(i, parents);
+    			
+    			if(children == null)
+    				children = new ArrayList<Node>();
+    			children.add(child);
+    		}
+    	}
+    	
+    	return children;
+    }
+    
+    public Point mstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+    	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
+    		path.remove(0);
+    	
+    	if(path.size() == 0){
+    		Point direction = Point.getDirection(currentLocation,initialLocation);
+    		Point unitDirection = Point.getUnitVector(direction);
+        	return unitDirection;    		
+    	}
+    	
+    	int targetIndex = path.get(0);    	
+    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
+    	Point unitDirection = Point.getUnitVector(direction);
+    	return unitDirection;
     }
 
     public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
