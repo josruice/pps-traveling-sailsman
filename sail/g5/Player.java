@@ -7,6 +7,8 @@ import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
+    double[] avgTargetDistances;
+    List<Point> prevGroupLocations;
     Map<Integer, Set<Integer>> visitedTargets; // For every player, store which targets he has visited.
     Map<Integer, Set<Integer>> unvisitedTargets; // For every player, store which target he has NOT visited.
     Map<Integer, Set<Integer>> playerVisitsByTarget; // For every target, store which players have visited it (been received).
@@ -15,6 +17,7 @@ public class Player extends sail.sim.Player {
     int id;
     int numTargets;
     int numPlayers;
+    Long initialTimeRemaining;
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
@@ -71,6 +74,8 @@ public class Player extends sail.sim.Player {
                         windMiddleToEdges.y + gen.nextDouble()
                 );
                 break;
+            case "windMiddleFromEdges":
+                break;
             default:
                 System.err.println("Invalid initial point "+INITIAL_POINT+" chosen");
                 initialLocation = new Point(0, 0);
@@ -115,6 +120,8 @@ public class Player extends sail.sim.Player {
         this.targets = targets;
         this.id = id;
         this.numPlayers = groupLocations.size();
+        this.initialTimeRemaining = null;
+
 
         // Initialize unvisited targets by player map.
         this.unvisitedTargets = new HashMap<Integer, Set<Integer>>();
@@ -127,11 +134,19 @@ public class Player extends sail.sim.Player {
         }
         this.ourUnvisitedTargets = this.unvisitedTargets.get(this.id);
 
-        // Initialize player visits by target map.
+        // Initialize player visits by target map and averaged distance from one target to the rest.
         this.playerVisitsByTarget = new HashMap<Integer, Set<Integer>>();
+        this.avgTargetDistances = new double[this.numTargets];
         for (int targetId = 0; targetId < this.numTargets; ++targetId) {
             Set<Integer> playerVisits = new HashSet<Integer>();
             this.playerVisitsByTarget.put(targetId, playerVisits);
+
+            for (int targetId2 = 0; targetId2 < this.numTargets; ++targetId2) {
+                if (targetId == targetId2) continue;
+                this.avgTargetDistances[targetId] += computeEstimatedTimeToTarget(
+                        this.targets.get(targetId), this.targets.get(targetId2));
+            }
+            this.avgTargetDistances[targetId] /= this.numTargets;
         }
         
         if(this.strategy== "mst"){
@@ -225,27 +240,36 @@ public class Player extends sail.sim.Player {
 
     @Override
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
+        if (this.initialTimeRemaining == null) this.initialTimeRemaining = timeRemainingMs;
         this.currentLocation = groupLocations.get(id);
-        
 //        if(unvisitedTargets.size() < 100){
 //        	this.strategy= "weightedGreedy";
 //        }
+        Point move;
         
         switch (this.strategy) {
             case "greedy":
-                return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+                move = greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+                break;
             case "weightedGreedy":
-                return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+                move = weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+                break;
             case "mst":
-            	return mstMove(groupLocations, id, timeStep, timeRemainingMs);
+            	move = mstMove(groupLocations, id, timeStep, timeRemainingMs);
+                break;
             case "clusteringMst":
-            	return clusteringMstMove(groupLocations, id, timeStep, timeRemainingMs);
+            	move = clusteringMstMove(groupLocations, id, timeStep, timeRemainingMs);
+                break;
             case "clusteringWeightedGreedy":
-            	return clusteringWeightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            	move = clusteringWeightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+                break;
             default:
                 System.err.println("Invalid strategy "+this.strategy+" chosen");
-                return new Point(0,0);
+                move = new Point(0,0);
+                break;
         }
+        this.prevGroupLocations = groupLocations;
+        return move;
     }
     
     public Point clusteringWeightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){    	
@@ -277,7 +301,7 @@ public class Player extends sail.sim.Player {
         	}
             double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
             int score = computeRemainingScore(targetId);
-            double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+            double othersTime = Utils.sum(computeUnvisitedPlayersTimeTo(groupLocations, targetId));
 
             double weight = (score * othersTime) / ourTime;
             if (weight > maxWeight) {
@@ -354,7 +378,7 @@ public class Player extends sail.sim.Player {
     	
     	for(int targetId: clusterPoints){
 	        int score = computeRemainingScore(targetId);
-	        double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+	        double othersTime = Utils.sum(computeUnvisitedPlayersTimeTo(groupLocations, targetId));
 	
 	        heuristic += score * othersTime;
     	}
@@ -408,17 +432,57 @@ public class Player extends sail.sim.Player {
     }
 
     public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-        // Let's get the maximum weight unvisited target according to the following formula:
-        //  targetWeight = (targetRemainingScore * distanceFromNonVisitedPlayers) / timeToTarget;
+        // Let's get the maximum weight unvisited target according to the following formula (if all params are enabled):
+        //  targetWeight =
+        //      targetRemainingScore * distanceFromNonVisitedPlayers * max(1, diffOfOurTimeAndClosestPlayerTime)
+        //     —————————————————————————————————————————————————————————————————————————————————————————————————————
+        //               timeToTarget * (weightedDistanceToOtherTargets || avgDistanceToOtherTargets)
 
         double maxWeight = Double.NEGATIVE_INFINITY;
         Point maxWeightTarget = this.initialLocation;  // If no unvisited targets, initial location will be our next target.
         for (int targetId : this.ourUnvisitedTargets) {
-            double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
-            int score = computeRemainingScore(targetId);
-            double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+            double weight = 1.0;
+            int score;
+            double ourTime;
 
-            double weight = (score * othersTime) / ourTime;
+            if (WG_SCORE_ENABLED) {
+                score = computeRemainingScore(targetId);
+                weight *= score;
+                if (score == 1) {
+                    // We are the only one that hasn't visited it. Penalize its weight so that this are the last one visited.
+                    weight /= 1000;
+                }
+            }
+
+            if (WG_TIME_ENABLED) {
+                ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
+                weight /= ourTime;
+            }
+
+            if (WG_PLAYERS_DISTANCES_ENABLED) {
+                List<Double> othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+                double minOthersTime = Utils.min(othersTime);
+
+                if (ourTime < minOthersTime) {
+                    // We are closer than anyone, so increment the weight inversely proportional to the difference between
+                    // the closest one distance and our distance.
+                    weight *= 2 - (minOthersTime - ourTime)/minOthersTime;
+                }
+
+                double avgPlayersTime = Utils.average(othersTime);
+                weight *= avgPlayersTime;
+            }
+
+            boolean wontTimeout =
+                    (this.numTargets <= 20) || (this.numTargets <= 100 && this.initialTimeRemaining > 9500);
+            if (WG_TARGETS_DISTANCES_ENABLED && wontTimeout) {
+                double weightedTargetsTime = computeWeightedTimeToOtherTargets(targetId, this.targets);
+                weight /= weightedTargetsTime;
+            } else {
+                // Fallback to an heuristic with less information, where we reward targets that are closer to other targets.
+                weight /= this.avgTargetDistances[targetId];
+            }
+
             if (weight > maxWeight) {
                 maxWeight = weight;
                 maxWeightTarget = targets.get(targetId);
@@ -477,8 +541,22 @@ public class Player extends sail.sim.Player {
     	return children;
     }
 
-    private double computeUnvisitedPlayersTimeTo(List<Point> groupLocations, int targetId) {
-        double distance = 0.0;
+    private double computeWeightedTimeToOtherTargets(int targetId, List<Point> targets) {
+        // It is weighted because it also takes into account the remaining score of those targets.
+        double weightedTime = 1.0;
+        Point thisTarget = targets.get(targetId);
+        for (int i : this.ourUnvisitedTargets) {
+            if (i == targetId) continue;  // Skip itself.
+            Point otherTarget = targets.get(i);
+            int remainingScore = computeRemainingScore(i);
+            weightedTime += computeEstimatedTimeToTarget(thisTarget, otherTarget) / remainingScore;
+        }
+        return weightedTime;
+    }
+
+
+    private List<Double> computeUnvisitedPlayersTimeTo(List<Point> groupLocations, int targetId) {
+        ArrayList<Double> distances = new ArrayList<Double>();
         Point target = this.targets.get(targetId);
         for (int playerId = 0; playerId < this.numPlayers; ++playerId) {
             if (playerId == this.id) continue; // Skip our own.
@@ -486,10 +564,10 @@ public class Player extends sail.sim.Player {
                 // This means that this player hasn't visited this target yet, so
                 // compute her time to target.
                 Point player = groupLocations.get(playerId);
-                distance += computeEstimatedTimeToTarget(player, target);
+                distances.add(computeEstimatedTimeToTarget(player, target));
             }
         }
-        return distance;
+        return distances;
     }
 
     private int computeRemainingScore(int targetId) {
@@ -565,8 +643,8 @@ public class Player extends sail.sim.Player {
     }
 
     /**
-    * visitedTargets.get(i) is a set of targets that the ith player has visited.
-    */
+     * visitedTargets.get(i) is a set of targets that the ith player has visited.
+     */
     @Override
     public void onMoveFinished(List<Point> groupLocations, Map<Integer, Set<Integer>> visitedTargets) {
         // Let's use this information to prepare some convenient data structures:
