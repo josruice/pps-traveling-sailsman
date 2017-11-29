@@ -16,7 +16,33 @@ public class Player extends sail.sim.Player {
     List<Point> prevGroupLocations;
     List<Point> groupMoves;
     List<Point> groupLocations;
-	int currentTargetIdx;
+    int currentTargetIdx;
+    HashMap<Point, List<Point>> nnMap;
+    
+    public void calculateNearestNeighbors() {
+        final int K = 5;
+        for (int i = 0; i < this.targets.size(); i++) {
+            Point target = targets.get(i);
+            PriorityQueue<Point> neighbors = new PriorityQueue<Point>(5, new Comparator<Point>() {
+                @Override
+                public int compare(Point o1, Point o2) {
+                    return new Double(approximateTimeToTarget(target, o2)).compareTo(approximateTimeToTarget(target, o1));
+                }
+            });
+            for (int j = 0; j < this.targets.size(); j++) {
+                if (i == j) {
+                    continue;
+                }
+                Point neighbor = targets.get(j);
+                neighbors.add(neighbor);
+                if (neighbors.size() > K) {
+                    neighbors.poll();
+                }
+            }
+            List<Point> neighborsList = new ArrayList<Point>(neighbors);
+            this.nnMap.put(target, neighborsList);
+        }
+    }
     
     public boolean playerWillReachTargetFirst(int p, Point target, int targetNum) {
         if (visited_set.get(p).contains(targetNum)) {
@@ -46,6 +72,31 @@ public class Player extends sail.sim.Player {
         return Math.abs(Point.angleBetweenVectors(playerMove, towardTarget)) < Math.PI / 6.0;
     }
     
+    private int estimatedValue(Point target, int targetNum) {
+        if (targetNum == -1) {
+            targetNum = this.targets.indexOf(target);
+        }
+        if (visited_set.get(id).contains(targetNum)) {
+            return 0;
+        }
+        int value = numPlayers;
+        for (int p = 0; p < numPlayers; p++) {
+            if (playerWillReachTargetFirst(p, target, targetNum)) {
+                value--;
+            }
+        }
+        return value;
+    }
+    
+    private double nnAdjustment(Point target, int targetNum) {
+        List<Point> neighbors = nnMap.get(target);
+        double total = 0.0;
+        for (Point neighbor : neighbors) {
+            total += estimatedValue(neighbor, -1) / approximateTimeToTarget(target, neighbor);
+        }
+        return total / neighbors.size();
+    }
+    
     private List<Double> getTargetWeights() {
         List<Double> weights = new ArrayList<Double>();
         for (int i = 0; i < targets.size(); i++) {
@@ -53,12 +104,8 @@ public class Player extends sail.sim.Player {
                 weights.add(-1.0);
             } else {
                 Point target = targets.get(i);
-                int value = numPlayers;
-                for (int p = 0; p < numPlayers; p++) {
-                    if (playerWillReachTargetFirst(p, target, i)) {
-                        value--;
-                    }
-                }
+                int value = estimatedValue(target, i);
+                //value += nnAdjustment(target, i);
                 weights.add(value / approximateTimeToTarget(groupLocations.get(id), target));
             }
         }
@@ -96,7 +143,38 @@ public class Player extends sail.sim.Player {
         // be deterministic (wrt input randomness)
         this.wind_direction = wind_direction;
         gen = new Random(seed);
-        initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+
+        String temp = "geo_center";
+        switch (temp) {
+            case "geo_center" :
+                initial = new Point((double) 5,(double) 5);
+                break;
+            case "geo_off_center" :
+                initial = new Point(5.0 + gen.nextDouble(), 5.0 + gen.nextDouble());
+                break;
+            case "corner" :
+                if(wind_direction.x < 0){
+                    if(wind_direction.y < 0){
+                        initial = new Point(7.5,7.5);
+                    } else {
+                        initial = new Point(7.5,2.5);
+                    }
+                } else {
+                  if(wind_direction.y < 0){
+                      initial = new Point(2.5,7.5);
+                  } else {
+                      initial = new Point(2.5,2.5);
+                  }
+                }
+                break;
+            case "speed_center" :
+                initial = new Point(0,0);
+                break;
+            default :
+                initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+                break;
+        }
+
         double speed = Simulator.getSpeed(initial, wind_direction);
         return initial;
     }
@@ -112,6 +190,8 @@ public class Player extends sail.sim.Player {
             visited_set.put(i, new HashSet<Integer>());
         }
 		this.currentTargetIdx = getClosestTarget();
+        this.nnMap = new HashMap<Point, List<Point>>();
+        calculateNearestNeighbors();
     }
 
     @Override
@@ -133,9 +213,6 @@ public class Player extends sail.sim.Player {
             return Point.getDirection(group_locations.get(id), initial);
         } 
 		else{ 
-            //if we reached last target, pick a new target
-			if(visited_set.get(id).contains(currentTargetIdx))
-			{
 				List<Double> weights = getTargetWeights();
 				
 				int highestIdx = 0;
@@ -144,7 +221,7 @@ public class Player extends sail.sim.Player {
 						highestIdx = i;
 				}
 				currentTargetIdx = highestIdx;
-			}
+
             return moveToTarget(dt);
         }
     }
@@ -159,9 +236,7 @@ public class Player extends sail.sim.Player {
 		double straightAngle = Point.angleBetweenVectors(pos, wind_direction);
 		double bestDist = approximateTimeToTarget(pos, target);
 		Point bestPoint = target;
-		
-		Point perp = Point.rotateCounterClockwise(wind_direction,1.59);	
-		double perpAngle = Point.angleBetweenVectors(target, perp);
+		double perpAngle = Point.getNorm(wind_direction);	
 		
 		for(double i = straightAngle; i<=perpAngle; i+= .1){
 			double x = 2.5 * Math.cos(i) - 0.5;

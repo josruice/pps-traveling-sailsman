@@ -16,10 +16,11 @@ public class Player extends sail.sim.Player {
     Point wind;
 
     int nextTarget = -1;
-    int isVisited[][];
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
+        // you don't have to use seed unless you want it to 
+        // be deterministic (wrt input randomness)
         wind = wind_direction;
         prevLoc = new ArrayList<>();
         path = new ArrayList<>();
@@ -36,37 +37,20 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
-        isVisited = new int[targets.size()][group_locations.size()];
     }
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
 
-        if (this.path.size() != 0 && visited_set.get(id).contains(nextTarget)) {
-            prevLoc.add(0, path.get(0));
-            path.remove(0);
-        }
-        else if (this.path.size() != 0) {
-            if (checkCrossedInterpolation(path.get(0), prevLoc.get(0), group_locations.get(id))) {
-                prevLoc.add(0, path.get(0));
-                path.remove(0);
-            }
-            return moveInPath(group_locations.get(id), path.get(0));
-        }
-
-        if(visited_set != null && visited_set.get(id).size() == targets.size()) {
+        if (visited_set != null && visited_set.get(id).size() == targets.size()) {
+            // This is if we have finished visiting all targets.
             nextTarget = targets.size();
-            return findPathAndMove(group_locations.get(id), initial);
+            return findAngle(group_locations.get(id), initial, dt);
         }
         else {
-            for (int i = 0; i < targets.size(); i++) {
-                for (int j = 0; j < group_locations.size(); j++) {
-                    if (isVisited[i][j] == 1) continue;
-                    if (Point.getDistance(targets.get(i), group_locations.get(j)) < 0.1) {
-                        isVisited[i][j] = 1;
-                    }
-                }
-            }
+            // System.out.println("Selecting next target.");
+            // Here is the logic to decide which target to head to next.
+            // Now we just consider the nearest target.
             double min = 1e9;
             int mark = 0;
             for (int i = 0; i < targets.size(); i++) {
@@ -74,7 +58,7 @@ public class Player extends sail.sim.Player {
                 int count = group_locations.size();
                 for (int j = 0; j < group_locations.size(); j++) {
                     if (j == id) continue;
-                    if (isVisited[i][j] > 0) {
+                    if (visited_set != null && visited_set.get(j).contains(i)) {
                         count--;
                     }
                 }
@@ -85,8 +69,27 @@ public class Player extends sail.sim.Player {
                 }
             }
             nextTarget = mark;
-            return findPathAndMove(group_locations.get(id), targets.get(mark));
+            return findAngle(group_locations.get(id), targets.get(mark), dt);
         }
+    }
+    
+    public Point findAngle(Point currentLoc, Point nextLoc, double dt) {
+        double min = 1e9;
+        Point result = nextLoc;
+        for (int i = 20; i < 160; i++) {
+            double angle = Math.PI * (i - 90) / 180;
+            Point direction = Point.getDirection(currentLoc, nextLoc);
+            Point rotation = Point.rotateCounterClockwise(direction, angle);
+            Point step = Point.multiply(rotation, dt);
+            Point median = Point.sum(currentLoc, step);
+            if (median.x < 0.1 || median.x > 9.9 || median.y < 0.1 || median.y > 9.9) continue;
+            double temp = getTrueWeight(currentLoc, median) + getTrueWeight(median, nextLoc);
+            if (temp < min) {
+                min = temp;
+                result = median;
+            }
+        }
+        return moveInPath(currentLoc, result);
     }
 
     public Point findPathAndMove(Point currentLoc, Point nextLoc) {
@@ -136,7 +139,7 @@ public class Player extends sail.sim.Player {
                 double y = p.y + j*step;
 
                 // Check if it's an invalid point.
-                if (x < 0 || y < 0 || x > 10.0 || y > 10.0) {
+                if (x < 0.1 || y < 0.1 || x > 9.9 || y > 9.9) {
                     continue;
                 }
 

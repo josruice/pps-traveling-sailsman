@@ -9,6 +9,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.*;
 import java.util.*;
+import java.util.stream.*;
 import java.util.concurrent.*;
 
 public class Simulator {
@@ -384,7 +385,8 @@ public class Simulator {
               player_locations,
               initial_player_locations,
               wind_direction,
-              gui_refresh
+              gui_refresh,
+              visited_set
             )
           );
         }
@@ -411,7 +413,8 @@ public class Simulator {
             player_locations,
             initial_player_locations,
             wind_direction,
-            gui_refresh
+            gui_refresh,
+            visited_set
           )
         );
       if(finished)
@@ -583,6 +586,18 @@ public class Simulator {
     return files;
   }
 
+  public static class BoostString {
+    double boost;
+    String str;
+    int i;
+
+    public BoostString(double boost, String str, int i) {
+        this.boost = boost;
+        this.str = str;
+        this.i = i;
+    }
+  }
+
   public static String state(
     int st,
     String[] groups,
@@ -591,7 +606,8 @@ public class Simulator {
     List<Point> players,
     List<Point> inits,
     Point wind_direction,
-    long gui_refresh) {
+    long gui_refresh,
+    Map<Integer, Set<Integer>> visited_set) {
 
     String buffer = "";
     buffer += st + ", ";
@@ -602,6 +618,15 @@ public class Simulator {
     for(double sc : scores) {
       buffer += sc + ", ";
     }
+
+    final Integer[] sorted = IntStream.range(0, numgroups)
+        .mapToObj(i -> new BoostString(scores[i], groups[i], i)) // Create the instance
+        .sorted(Comparator.comparingDouble(b -> b.boost))         // Sort using a Comparator
+        .map(b -> b.i)                                       // Map it back to a string
+        .toArray(Integer[]::new);  
+    for(Integer inte : sorted) {
+      buffer += (int)inte + ", ";
+    } 
     for(Point x : players) {
       buffer += x.x + ", " + x.y + ", ";
     }
@@ -611,6 +636,13 @@ public class Simulator {
     buffer += targets.size() +", ";
     for(Point x : targets) {
       buffer += x.x + ", " + x.y + ", ";
+    }
+    for(int i = 0 ; i < t; ++i) {
+      int num = 0;
+      for(int j = 0;j<numgroups; ++j) {
+        num += (visited_set.get(j).contains(i)==true? 1:0);
+      }
+      buffer += num +", ";
     }
     buffer += wind_direction.x + ", " + wind_direction.y + ", ";
     buffer += gui_refresh;
