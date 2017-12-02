@@ -7,6 +7,7 @@ import java.awt.Desktop;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.*;
 import java.util.*;
 import java.util.stream.*;
@@ -25,11 +26,15 @@ public class Simulator {
   private static long gui_refresh;
   private static boolean gui_enabled, log;
   private static double DT = 0.015; // test?
+  private static boolean is_tournament = false;
 
   public static void main(String[] args) throws Exception {
       JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
       if(compiler == null) throw new IOException(":(");
     parseArgs(args);
+    if(is_tournament) {
+      System.out.print(t +", " + DT + ", "+total_time+", ");
+    }
     if(numgroups == -1 || t == -1) {
       throw new IllegalArgumentException("Missing groups or targets");
     }
@@ -101,6 +106,10 @@ public class Simulator {
     Player[] players, 
     Long seed
   ) throws Exception {
+    PrintStream original = System.out;
+    if(is_tournament)
+      System.setOut(new NullPrintStream());
+
     HTTPServer server = null;
     Random gen = new Random(seed);
     if (gui_enabled) {
@@ -147,9 +156,8 @@ public class Simulator {
         player_locations.add(p);
         initial_player_locations.add(p);
       } catch(TimeoutException ex) {
-        if(log) {
+        if(!is_tournament)
           System.out.println("Player "+groups[i] + " timed out" );
-        }
         time_remaining[i] = 0;
         ex.printStackTrace();
         initial_player_locations.add(new Point(0,0));
@@ -193,9 +201,9 @@ public class Simulator {
         }, time_remaining[i]);
         time_remaining[i] -= timers[i].getElapsedTime();
       } catch(TimeoutException ex) {
-        if(log) {
+        if(!is_tournament)
           System.out.println("Player "+groups[i] + " timed out" );
-        }
+        
 
         time_remaining[i] = 0;
       } catch (Exception ex) {
@@ -259,9 +267,9 @@ public class Simulator {
           // ", "+newLocations.get(i).y+")");
 
         } catch(TimeoutException ex) {
-          if(log) {
+          if(!is_tournament)
             System.out.println("Player " + i + ": "+groups[i] + " timed out" );
-          }
+          
           ex.printStackTrace();
           newLocations.add(player_locations.get(i));
           time_remaining[i] = 0;
@@ -335,11 +343,21 @@ public class Simulator {
               newLocations.get(i)
           )
         ) {
-          System.out.println("Finisher was "+groups[i]);
+          if(is_tournament) {
+            System.setOut(original);
+            System.out.print(groups[i]+", ");
+          }
+          else
+            System.out.println("Finisher was "+groups[i]);
           finished = true;
         }
       }
-      if(all_timed_out) {
+
+      if(!finished && all_timed_out) {
+        if(is_tournament) {
+          System.setOut(original);
+          System.out.print(",");
+        }
         finished = true;
       }
 
@@ -360,9 +378,9 @@ public class Simulator {
           time_remaining[i] -= timers[i].getElapsedTime();
 
         } catch(TimeoutException ex) {
-          if(log) {
+          if(!is_tournament)
             System.out.println("Player " + i + ": "+groups[i] + " timed out" );
-          }
+          
           ex.printStackTrace();
           time_remaining[i] = 0;
         } catch (Exception ex) {
@@ -421,8 +439,13 @@ public class Simulator {
         break;
     }
     for(int j = 0 ; j < numgroups; ++ j) {
-      System.out.println(groups[j] + " scored " + scores[j]);
+      if(!is_tournament)
+        System.out.println(groups[j] + " scored " + scores[j]);
+      else {
+        System.out.print(scores[j]+", "+time_remaining[j]+", ");
+      }
     }
+    System.out.println();
     if(server != null) server.close();
   }
 
@@ -514,6 +537,8 @@ public class Simulator {
         gui_enabled = true;
       } else if (args[i].equals("--verbose")) {
         log = true;
+      } else if (args[i].equals("--tournament")) {
+        is_tournament = true;
       } else {
         throw new IllegalArgumentException("Unknown argument: " + args[i]);
       }

@@ -21,10 +21,9 @@ public class Player extends sail.sim.Player {
     int curIndex;
     int[] nextTargetIndexes;
     int nextTargetIndex;
+    int skip;
 
     int turn_num;
-
-    boolean greedyChoice;
 
     double BESTANGLE = 0.511337; 
     double BESTANGLE_UPWIND = 0.68867265359;
@@ -38,7 +37,8 @@ public class Player extends sail.sim.Player {
     boolean upwind;
     boolean lastMoveIs1 = true;
 
-    int count;
+    HashMap<Integer, Point[]> playerMoves = new HashMap<Integer, Point[]>();
+    int curSeqenceLength;
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
@@ -46,7 +46,7 @@ public class Player extends sail.sim.Player {
         // be deterministic (wrt input randomness)
         this.t = t;
         gen = new Random(seed);
-        initial = initStartPoint(wind_direction, 0.0, 5.0, 5.0);
+        initial = initStartPoint(wind_direction, 1.0, 5.0, 5.0);
         this.wind_direction = wind_direction;
         double speed = Simulator.getSpeed(initial, wind_direction);
         return initial;
@@ -72,7 +72,7 @@ public class Player extends sail.sim.Player {
         } else if(t <= 50) {
             this.K = Math.min(3, t);
         } else {
-            this.K = Math.min(4, t);
+            this.K = Math.min(5, t);
         }
         targetScore = new int[targets.size()];
         for(int i = 0; i < targetScore.length; i++) {
@@ -80,8 +80,18 @@ public class Player extends sail.sim.Player {
         }
 
         curIndex = -1;
+        skip = -1;
         this.currentLocation = group_locations.get(id);
         initializeBestSpeedVector();
+        for (int i=0; i<group_locations.size(); i++){
+            printPoint(group_locations.get(i));
+            playerMoves.put(i, new Point[] {null, group_locations.get(i)});
+        }
+       /* printMap();
+        System.out.println("targets: ");
+        for (Point t : targets){
+            printPoint(t);
+        }*/
     }
 
     private void initializeBestSpeedVector(){
@@ -105,21 +115,85 @@ public class Player extends sail.sim.Player {
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
         this.currentLocation = group_locations.get(id);
+        for (int i=0; i<group_locations.size(); i++){
+            playerMoves.put(i, new Point[] {playerMoves.get(i)[1], group_locations.get(i)});
+            if (i == id) continue;
+            
+            ArrayList<Point> predictList = predictNextTarget(i, playerMoves.get(i)[0], playerMoves.get(i)[1]);
+            if (nextTargetIndexes != null && curIndex != -1 && curIndex < curSeqenceLength) {
+                if (nextTargetIndexes[curIndex] == targets.size()) break;
+                Point next = targets.get(nextTargetIndexes[curIndex]);
+                double oppTime = getTimeToTravel(next, group_locations.get(i));
+                double ourTime = getTimeToTravel(next, group_locations.get(id)); 
+                if (predictList.contains(next) && oppTime < ourTime) {
+                    skip = nextTargetIndexes[curIndex];
+                } else if (predictList.contains(next) && oppTime >= ourTime) {
+                    skip = -1;
+                }
+            } else {
+                for(int j=0; j<predictList.size(); j++) {
+                    if (visited_set != null && !visited_set.get(this.id).contains(predictList.get(j))) {
+                        double oppTime = getTimeToTravel(predictList.get(j), group_locations.get(i));
+                        double ourTime = getTimeToTravel(predictList.get(j), group_locations.get(id));
+                        if (ourTime < oppTime) {
+                            nextTargetIndexes = selectKBest(predictList.get(j));
+                            curIndex = 0;
+                        }
+                    } 
+                }
+            }
+        }
+
+        if (skip != -1) {
+            nextTargetIndexes = selectKBest(group_locations.get(id));
+            curIndex = 0;
+            skip = -1;
+        }
+        
+      //  System.out.println("---------------");
         return nearestNeighborMove(group_locations, id, dt, time_remaining_ms);
     }
 
+    private ArrayList<Point> predictNextTarget(int playerId, Point prev, Point current){
+        ArrayList<Point> predictList = new ArrayList<>();
+        if (prev != current){
+            double slope = (current.y-prev.y) / (current.x-prev.x);
+            double y, x;
+            y = current.y;
+            x = current.x;
+            for (Point a : targets){
+                if (visited_set.get(playerId).contains(a)) continue;
+                double y_delta = a.y-y;
+                double x_delta = a.x-x;
+                double delta = y_delta/x_delta;
+                double slope_variation = delta/slope;
+                if (slope_variation >=0.9 && slope_variation <= 1.1){
+                    double prev_y_delta = current.y-prev.y;
+                    if ((prev_y_delta < 0 && y_delta < 0) || (prev_y_delta > 0 && y_delta > 0))
+                        predictList.add(a);
+                }
+            }
+        }
+
+     /*   for (Point a : predictList){
+            printPoint(a);
+        }*/
+
+        return predictList;
+    }
 
     public Point nearestNeighborMove(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
         turn_num++;
         boolean justHitATarget = false;
-        while(curIndex < K && visited_set != null && visited_set.get(id).contains(nextTargetIndexes[curIndex])) {
+        while(curIndex < curSeqenceLength && visited_set != null && nextTargetIndexes != null && visited_set.get(id).contains(nextTargetIndexes[curIndex])) {
             curIndex++;
             justHitATarget = true;
         }
 
-        if(nextTargetIndexes == null || curIndex == K || curIndex == -1) {
-            selectKBest(group_locations.get(id));
+        if(nextTargetIndexes == null || curIndex == curSeqenceLength || curIndex == -1) {
+            nextTargetIndexes = selectKBest(group_locations.get(id));
             curIndex = 0;
+            justHitATarget = true;
         }
 
         if(nextTargetIndexes[curIndex] == targets.size()) {
@@ -127,32 +201,19 @@ public class Player extends sail.sim.Player {
         } else {
             return moveHelper(group_locations, targets.get(nextTargetIndexes[curIndex]), dt, justHitATarget);
         }
-        /*
-        if(nextTargetIndex == -1 || visited_set.get(id).contains(nextTargetIndex)) {
-            return Point.getUnitVector(Point.getDirection(group_locations.get(id), selectKBest(group_locations.get(id))));
-        } else {
-            if(nextTargetIndex < targets.size()) {
-                return Point.getUnitVector(Point.getDirection(group_locations.get(id), targets.get(nextTargetIndex)));
-            } else {
-                return Point.getUnitVector(Point.getDirection(group_locations.get(id), initial));
-            }
-        }
-        */
     }
 
     private Point moveHelper(List<Point> group_locations, Point target, double dt, boolean justHitATarget) {
         if (dt <= 0.004) {
             if (justHitATarget) {
-                Point direction = Point.getDirection(this.currentLocation, target);
                 double x1 = group_locations.get(id).x;
-                double y1 = group_locations.get(id).y;
-                double x2 = target.x;
-                double y2 = target.y;
-                double d = Math.sqrt( (y2-y1)*(y2-y1) + (x2-x1)*(x2-x1) );
+                double y1 = group_locations.get(id).y; 
+                double x = target.x;
+                double y = target.y;
+                Point newTarget = new Point(x,y);
+                Point direction = Point.getDirection(this.currentLocation, newTarget);
+
                 double theta = Point.angleBetweenVectors(direction, wind_direction);
-    
-                double dx = d*Math.cos(theta);
-                double dy = d*Math.sin(theta);
     
                 if (theta <= BESTANGLE ||
                     theta >= -BESTANGLE + 2*Math.PI) {
@@ -176,7 +237,7 @@ public class Player extends sail.sim.Player {
                 if (timeOnBestDirection1 > dt && timeOnBestDirection2 > dt) {
                     return alternateBetween1And2(group_locations, dt);
                 }
-                else if (timeOnBestDirection1 > 2 * dt) {
+                else if (timeOnBestDirection1 > dt) {
                     timeOnBestDirection1 -= dt;
                     return this.upwind ? bestDirection1_upwind : bestDirection1;
                 }
@@ -279,29 +340,46 @@ public class Player extends sail.sim.Player {
 
     public int[] selectKBest(Point curLoc) {
         double maxScore = -1;
-        int targetIndex = -1;
-        int[] p = new int[K];
+        int[] bestSeq = new int[K];
+        for(int i = 1; i <= K; i++) {
+            int[] seq = selectKBest(curLoc, i);
+            double score = getTargetsScore(curLoc, seq);
+            System.out.println(i + ": " + score);
+            if(score > maxScore) {
+                bestSeq = seq;
+                curSeqenceLength = i;
+                maxScore = score;
+            }
+        }
 
+        //System.out.println(curSeqenceLength);
+        return bestSeq;
+    }
+
+    public int[] selectKBest(Point curLoc, int L) {
+        double maxScore = -1;
+        int targetIndex = -1;
+        int[] p = new int[L];
+        int[] maxP = new int[L];
         int nearestTarget = findNearestNeighbor(curLoc);
-        if(visited_set != null && visited_set.get(this.id).size() > targets.size() - K) {
-            nextTargetIndex = nearestTarget;
-            nextTargetIndexes[0] = nearestTarget;
-            return nextTargetIndexes;
+        if(visited_set != null && visited_set.get(this.id).size() > targets.size() - L) {
+            maxP[0] = nearestTarget;
+            return maxP;
         }
 
         //maxScore = getTargetScore(curLoc, nearestTarget);
         //targetIndex = nearestTarget;
         for(int i = 0; i < targets.size(); i++) {
-            if(visited_set != null && visited_set.get(this.id).contains(i)) continue;
+            if(visited_set != null && visited_set.get(this.id).contains(i) || i == skip) continue;
 
-            p = findNearestNeighbors(i);
+            p = findNearestNeighbors(i, L);
 
             // Compute time to get to target
             double score = getTargetsScore(curLoc, p);
             if(score > maxScore) {
                 maxScore = score;
                 targetIndex = i;
-                nextTargetIndexes = p;
+                maxP = p;
             }
         }
 
@@ -310,15 +388,12 @@ public class Player extends sail.sim.Player {
             targetIndex = targets.size();
         }
 
-        nextTargetIndex = targetIndex;
-
-
-        return nextTargetIndexes;
+        return maxP;
     }
 
 
-    public int[] findNearestNeighbors(int targetIndex) {
-        int[] nextPoints = new int[K];
+    public int[] findNearestNeighbors(int targetIndex, int L) {
+        int[] nextPoints = new int[L];
         nextPoints[0] = targetIndex;
         Set<Integer> excluded = new HashSet<Integer>();
         excluded.add(nextPoints[0]);
@@ -366,15 +441,6 @@ public class Player extends sail.sim.Player {
             // Compute time to get to target
             double score = getTargetScore(curLoc, i);
 
-            /*
-            if(nearestTarget != null && i != nextTargetIndex && Point.getDistance(targets.get(nextTargetIndex), targets.get(i)) <= 0.02) {
-                nearestTarget = new Point((targets.get(i).x + targets.get(nextTargetIndex).x)/2, (targets.get(i).y +  targets.get(nextTargetIndex).y)/2);
-                nextTargetIndex = i;
-                minTime = getTimeToTravel(curLoc, nearestTarget);
-            } else
-            */
-
-
             if(score > maxScore) {
                 nearestTarget = targets.get(i);
                 maxScore = score;
@@ -387,7 +453,7 @@ public class Player extends sail.sim.Player {
             nearestTarget = initial;
             targetIndex = targets.size();
         }
-
+        
         return targetIndex;
     }
 
@@ -397,20 +463,24 @@ public class Player extends sail.sim.Player {
 
     private double getTargetScore(Point from, int targetIndex) {
         double travelTime = getTimeToTravel(from, targets.get(targetIndex));
-        return targetScore[targetIndex]/(travelTime);
+        //System.out.println("time: " + travelTime);
+        //System.out.println("score: " + targetScore[targetIndex]);
+        return targetScore[targetIndex]/Math.pow(travelTime, 1);
     }
 
     private double getTargetsScore(Point from, int[] targetIndexes) {
+        if(targetIndexes[0] == t) return 0;
         double travelTime = getTimeToTravel(from, targets.get(targetIndexes[0]));
         double score = targetScore[targetIndexes[0]];
         for(int i = 1; i < targetIndexes.length; i++) {
             travelTime += getTimeToTravel(targets.get(targetIndexes[i-1]), targets.get(targetIndexes[i]));
-            score += targetScore[targetIndexes[i]];
+            score += targetIndexes[i] == t ? 0 : targetScore[targetIndexes[i]];
         }
 
-        return score/(travelTime);
+        //System.out.println("time: " + travelTime);
+        //System.out.println("score: " + score);
+        return score/Math.pow(travelTime, 1);
     }
-
 
     /**
     * visited_set.get(i) is a set of targets that the ith player has visited.
@@ -427,6 +497,26 @@ public class Player extends sail.sim.Player {
             for(int l : visitedTargets) {
                 targetScore[l]--;
             }
+        }
+    }
+
+    private void printPoint(Point a){
+        System.out.println("(" + a.x + "," + a.y + ")");
+    }
+
+    private void printPointArray(Point prev, Point current){
+        if (prev != null && current != null)
+            System.out.println("[(" + prev.x + "," + prev.y + ") , (" + current.x + "," + current.y + ")");
+        else if (prev==null)
+            System.out.println("[(" + "null) , (" + current.x + "," + current.y + ")");
+    }
+
+    private void printMap(){
+        for (Map.Entry<Integer, Point[]> entry : playerMoves.entrySet()) {
+            Integer key = entry.getKey();
+            Point[] value = entry.getValue();
+            System.out.print(key + ": ");
+            printPointArray(value[0], value[1]);
         }
     }
 }

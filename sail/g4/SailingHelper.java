@@ -1,4 +1,4 @@
-package sail.g4x;
+package sail.g4;
 
 import sail.sim.Point;
 import sail.sim.Simulator;
@@ -12,7 +12,7 @@ public class SailingHelper {
     Point initial;
     Point wind_direction;
     double wind_angle;
-
+    Double heurisitc_coefficient = 0.2;
     public SailingHelper(List<Point> targets, int id, Point initial, Point wind_direction, double wind_angle)	{
     	this.targets = targets;
     	this.id = id;
@@ -24,7 +24,22 @@ public class SailingHelper {
     public int valueOf(int targetIndex, HashMap<Integer, Set<Integer>> visited_set) {
         return -1;
     }
+    public double relativeDistance(List<Point> groupLocations, Point target){
+        double dist = 0;
+        for(int p=0;p<groupLocations.size();p++){
 
+            if(p==id){
+                continue;
+            }
+            dist+=Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
+        }
+        return  dist;
+    }
+    public boolean playerWillReachTargetFirst(int p, Point target,List<Point> groupLocations, Point currentLoc){
+        double t1  = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+        double t2 = Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
+        return t1<=t2;
+    }
     public double squared(double x) {
         return x*x;
     }
@@ -50,7 +65,6 @@ public class SailingHelper {
         // taking into account the current [bug](removed) units inconsistency in the simulator
         double maxOrthogonalDistanceOfMove = 1.0 * 5.0 * dt;
         return p.x < maxOrthogonalDistanceOfMove || p.y < maxOrthogonalDistanceOfMove || 10.0-p.x < maxOrthogonalDistanceOfMove || 10.0-p.y < maxOrthogonalDistanceOfMove;
-
     }
     // foud on internet
     public ArrayList<ArrayList<Point>> listPermutations(ArrayList<Point> list) {
@@ -309,7 +323,37 @@ public class SailingHelper {
         }
         return closest;
     }
+    public Point getHeuristicDistance(ArrayList<Integer> availableTargetIndices, Point currentLoc,int numPlayers, List<Point> groupLocations) {
 
+        double maxi = 0.0;
+        int maxiIndex = availableTargetIndices.get(0);
+        for (int i : availableTargetIndices) {
+                Point target = targets.get(i);
+                double value = numPlayers;
+                for (int p = 0; p < numPlayers; p++) {
+                    if (!playerWillReachTargetFirst(p,target,groupLocations,currentLoc)) {
+                        value--;
+                    }
+                }
+                //System.out.println(heurisitc_coefficient);
+                //System.out.println((1-heurisitc_coefficient)*10/Point.getDistance(currentLoc, targets.get(i)));
+
+                double t = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+//                System.out.println(value);
+//                System.out.println(40.0/t);
+                double heuristic = 0.0;
+                int n = targets.size();
+                double dist = relativeDistance(groupLocations,target);
+                heuristic = value*value*dist/(t*Point.getDistance(currentLoc, target));
+
+                maxi = Math.max(maxi,heuristic);
+                if(maxi == heuristic){
+                    maxiIndex = i;
+                }
+            }
+
+        return targets.get(maxiIndex);
+    }
     public ArrayList<Point> getkOptimalTargets(ArrayList<Integer> availableTargetIndices, Point currentLoc, int k) {
         ArrayList<Point> availableTargets = new ArrayList<Point>();
         for (int i : availableTargetIndices) {
@@ -326,5 +370,7 @@ public class SailingHelper {
         }
         return findBestPathByTime(currentLoc, kClosest)/*.get(0)*/;
     }
+
+
 
 }
