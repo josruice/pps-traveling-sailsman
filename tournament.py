@@ -14,9 +14,15 @@ def save_float(x):
 
 primal_seed = 20171126
 env_vars = [
-    # (20,  0.015, 1000, 100),
-    (100, 0.015, 10000, 100),
-    # (100, 0.015, 20000, 10)
+    (5,   0.015, 1000,  10),
+    (25,  0.015, 2500,  10),
+    (100, 0.015, 10000, 10),
+    (500, 0.015, 50000, 10),
+
+    (5,   0.004, 1000,  10),
+    (25,  0.004, 2500,  10),
+    (100, 0.004, 10000, 10),
+    (500, 0.004, 50000, 10)
 ]
 players = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6']
 
@@ -31,7 +37,10 @@ for num_targets, time_step, time_limit, repetition in env_vars:
 
     results = {}
     for p in players:
-        results[p] = { 'final_scores': [] }
+        results[p] = {
+            'final_scores': [],
+            'time_remaining': []
+        }
 
     not_best_score_rounds = []
     last_score_rounds = []
@@ -40,6 +49,7 @@ for num_targets, time_step, time_limit, repetition in env_vars:
         p = open("tmp.log", "w")
         err = open("err.log", "w")
         subprocess.run(["java", "sail.sim.Simulator",
+            "--tournament",
             "--seed", str(seeds[run]),
             "-t", str(num_targets),
             "-dt", str(time_step),
@@ -49,16 +59,20 @@ for num_targets, time_step, time_limit, repetition in env_vars:
         err.close()
 
         with open("tmp.log", "r") as log:
-            t = log.readlines()[-len(players):]
+            t = log.readlines()[-1]
+            parsed_log = [save_float(s) for s in t.split(', ')][:-1]
+
             our_final_score = None
             round_final_scores = []
-            for i in range(len(players)):
-                parsed_log = [save_float(s) for s in t[i].split()]
-                final_score = parsed_log[-1]
+            for i, player in enumerate(players):
+                player_base_index = (2*i) - len(players)*2
+                final_score = parsed_log[player_base_index]
+                time_remaining = parsed_log[player_base_index+1]
                 round_final_scores.append(final_score)
-                if players[i] == 'g5':
+                if player == 'g5':
                     our_final_score = final_score
                 results[players[i]]['final_scores'].append(final_score)
+                results[players[i]]['time_remaining'].append(time_remaining)
 
             # Use this checks to find runs where our strategy might not work.
             if (our_final_score == min(round_final_scores)):
@@ -81,8 +95,9 @@ for num_targets, time_step, time_limit, repetition in env_vars:
     print()
     for player, scores in results.items():
         final_scores = scores['final_scores']
+        time_remaining = scores['time_remaining']
 
-        print("%d,%d,%d,%d,%d,%s,%.2f,%.2f,%d,%d,%.2f" % (
+        print("%d,%d,%d,%d,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % (
             repetition,
             primal_seed,
             num_targets,
@@ -92,16 +107,22 @@ for num_targets, time_step, time_limit, repetition in env_vars:
 
             statistics.mean(final_scores),
             statistics.median(final_scores),
-            int(min(final_scores)),
-            int(max(final_scores)),
-            statistics.pstdev(final_scores)
+            min(final_scores),
+            max(final_scores),
+            statistics.pstdev(final_scores),
+
+            statistics.mean(time_remaining),
+            statistics.median(time_remaining),
+            min(time_remaining),
+            max(time_remaining),
+            statistics.pstdev(time_remaining)
         ))
     print()
     if len(last_score_rounds) > 0:
         print('We have been LAST for the following runs: \n - ', end='')
         print('\n - '.join(last_score_rounds))
-    print()
-    if len(not_best_score_rounds) > 0:
-        print('We have been NOT FIRST for the following runs: \n - ', end='')
-        print('\n - '.join(not_best_score_rounds))
+    # print()
+    # if len(not_best_score_rounds) > 0:
+    #     print('We have been NOT FIRST for the following runs: \n - ', end='')
+    #     print('\n - '.join(not_best_score_rounds))
     print('\n')
