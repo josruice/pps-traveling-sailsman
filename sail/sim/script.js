@@ -92,7 +92,7 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.lineTo(ox + w/4, oy + h/2);
         ctx.lineTo(ox + w/2, oy + h/4);
         ctx.closePath();
-        ctx.strokeStyle = colors[i%numcols];
+        ctx.strokeStyle = "black";
         ctx.fillStyle = colors[i%numcols];
         ctx.lineWidth = 3;
         ctx.stroke();
@@ -113,16 +113,16 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.fillStyle = colors[i % numcols];
         ctx.fill();
 
-        ctx.font = "15px Arial";
+        ctx.font = "14px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.strokeStyle = "black";
         ctx.strokeText(i+1,        min_x + (max_x - min_x) * xcoords[i]/10 + 5,min_y + (max_y - min_y) * ycoords[i]/10- 5);
         
     }
 }
 
-function draw_landmarks(min_x, min_y, max_x, max_y, num, xcoords, ycoords, color) {
+function draw_landmarks(min_x, min_y, max_x, max_y, num, xcoords, ycoords, num_on_targets, maxnum) {
     var ctx = document.getElementById('canvas').getContext('2d');
     for(var i = 0 ; i < num ; ++ i) {
         ctx.beginPath();
@@ -139,7 +139,10 @@ function draw_landmarks(min_x, min_y, max_x, max_y, num, xcoords, ycoords, color
         ctx.lineWidth = 2;
         ctx.strokeStyle = "black";
         ctx.stroke();
-        ctx.fillStyle=color;
+        var gb =parseInt(255 - 255 * (maxnum - num_on_targets[i])/maxnum);
+        var col="rgb(255," + gb +", " + gb + ")";
+        console.log(i + ": "+gb);
+        ctx.fillStyle = col;
         ctx.fill();
     }
 }
@@ -212,7 +215,7 @@ function draw_outpost(min_x, min_y, max_x, max_y, rows, cols) {
     ctx.fill();
 }
 
-function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx ,windy)
+function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx ,windy, sorted_groups)
 {
 	var canvas = document.getElementById("canvas");
 	var ctx = canvas.getContext("2d");
@@ -237,8 +240,6 @@ function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx
 
     ctx.beginPath();
     ctx.moveTo(min_x+30, min_y + 30);
-    console.log(windx);
-    console.log(windy);
     ctx.lineTo(min_x + 30 + windx * 20, min_y + 30 + windy * 20);
     //ctx.closePath();
     ctx.lineWidth = 4;
@@ -260,9 +261,19 @@ function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx
     for(var i = 0 ; i < n ; ++ i) {
         ctx.font = "32px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 4;
         ctx.strokeStyle = colors[i];
         ctx.strokeText(groups[i] + ": " + scores[i],        min_x, min_y + 30*(3+i));
+        // ctx.strokeText("CPU time: " + cpu + " s", min_x, min_y + 90);
+        // ctx.strokeText("Legend:", min_x, min_y + 150);
+        ctx.fillStyle = colors[i];
+    }
+    for(var i = 0 ; i < n ; ++ i) {
+        ctx.font = "32px Arial";
+        ctx.textAlign = "left";
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = colors[sorted_groups[n-1-i]];
+        ctx.strokeText("Rank " + (i+1) + ": " + groups[sorted_groups[n-1-i]],        min_x, min_y + 30*(3+i+n));
         // ctx.strokeText("CPU time: " + cpu + " s", min_x, min_y + 90);
         // ctx.strokeText("Legend:", min_x, min_y + 150);
         ctx.fillStyle = colors[i];
@@ -286,7 +297,10 @@ function process(data)
     for(var i = 0 ; i < n ; ++ i) {
         scores[i] = Number(data[cur++]);
     }
-
+    var sorted_groups = new Array(n);
+    for(var i =0;i < n;++i) {
+        sorted_groups[i] = Number(data[cur++]);
+    }
     var playerx = new Array(n);
     var playery = new Array(n);
     for(var i = 0 ; i < n ; ++ i) {
@@ -307,6 +321,10 @@ function process(data)
         tx[i] = Number(data[cur++]);
         ty[i] = Number(data[cur++]);
     }
+    var num_on_targets = new Array(t);
+    for(var i = 0; i < t; ++ i) {
+        num_on_targets[i] = Number(data[cur++]);
+    }
     var windx = Number(data[cur++]);
     var windy = Number(data[cur++]);
     var refresh = Number(data[cur++]);
@@ -323,14 +341,12 @@ function process(data)
     var maxy = 650;
     draw_grid(300, 50, 900, 650,1, 1, "black");
     // draw for 1st player
-    //var colors = ["#000",  "#333", "#666", "#999", "green","#CCC"];
-    var colors = ["orange",  "purple", "green", "darkblue", "black", "lightseagreen"];
-    //var colors = ["orange",  "purple", "green", "darkblue", "yellow","lightseagreen"];
-
-    draw_landmarks(minx, miny, maxx, maxy, t, tx, ty, "red");
+    var colors = ["orange",  "purple", "green", "darkblue", "black","lightseagreen", "darkgoldenrod"];
+    
+    draw_landmarks(minx, miny, maxx, maxy, t, tx, ty, num_on_targets, n);
     draw_dots(minx, miny, maxx, maxy, n, initplayerx, initplayery, 1, ["black"], true);
-    draw_boat(minx, miny, maxx, maxy, n, playerx, playery, 6, colors);
-    draw_side ( 10,  40,  190, 690, n, groups, colors, scores, windx, windy);
+    draw_boat(minx, miny, maxx, maxy, n, playerx, playery, 7, colors);
+    draw_side ( 10,  40,  190, 690, n, groups, colors, scores, windx, windy, sorted_groups);
     //draw_outpost(250, 50, 850, 650 , n+2, n+2);
     //draw_shape(250,  50,  850, 650, 50, 50, buildings, cuts, colors, types, highlight == 0);
     return refresh;

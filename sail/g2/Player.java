@@ -16,21 +16,51 @@ public class Player extends sail.sim.Player {
     int num_visited;
     Point current_target;
     int num_players;
+    boolean second_stage = false;
+    Map<Integer, List<Double>> target_dist_map;
+    Map<Integer, Integer> targets_visited;
+    ArrayList<Point> memory;
+
+    int curr_target_ind = -1;
+
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
-        // you don't have to use seed unless you want it to 
+        // you don't have to use seed unless you want it to
         // be deterministic (wrt input randomness)
         gen = new Random(seed);
         // if(t >= 10){
         // //random initialization
-        //     initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+        //      initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
         // }
-        //else{
+        // else{
         //center square initialization
-        initial = new Point(4.5 + gen.nextDouble()*1, 4.5 + gen.nextDouble()*1);
-        //}
-        double speed = Simulator.getSpeed(initial, wind_direction);
+         //initial = new Point(4.5 + gen.nextDouble(), 4.5 + gen.nextDouble());
+    // }
+
+
+        Point unit = Point.getUnitVector(wind_direction);
+        initial = new Point(6, 5- unit.x / unit.y);
+        if(initial.y > 10 || initial.y < 0 || initial.x > 10 || initial.x < 0){
+            //System.out.println("will be at the center");
+            //initial = new Point(4.5 + gen.nextDouble(), 4.5 + gen.nextDouble());
+            initial = new Point(4, 5+ unit.x / unit.y);
+        }
+        if(initial.y > 10 || initial.y < 0 || initial.x > 10 || initial.x < 0){
+            //System.out.println("will be at the center");
+            initial = new Point(4.5 + gen.nextDouble(), 4.5 + gen.nextDouble());
+        }
+
+        // if(initial.y > 10){
+        //     System.out.println( "start point "+initial.x + " " + initial.y);
+        //     initial = new Point(4+ gen.nextDouble()*1, unit.x / unit.y-5+ gen.nextDouble()*1 );
+        // }
+        // if (initial.y < 0){
+        //     System.out.println( "start point "+initial.x + " " + initial.y);
+        //     initial = new Point(4+ gen.nextDouble()*1, unit.x / unit.y+10+ gen.nextDouble()*1 );
+        // }
+
+        //System.out.println( "start point "+initial.x + " " + initial.y);
         this.wind_direction = wind_direction;
         return initial;
 
@@ -40,81 +70,131 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         //this.targets = new ArrayList<Point>();
         this.targets = targets;
+        this.target_dist_map = new HashMap<Integer, List<Double>>();
+        this.targets_visited = new HashMap<Integer, Integer>();
+        this.memory = new ArrayList<Point>();
+
+        this.num_players = group_locations.size();
+        //store everyone's initial location
+        for (int i= 0; i < this.num_players; i++) {
+          memory.add(group_locations.get(i));
+        }
 
         int result = -1;
-        double d = -1;
+        double tempTime = -1;
         for(int i = 0; i < this.targets.size(); i++){
-            double dist = getDistance(this.initial, this.targets.get(i));
-            if(dist < d || d == -1){
-                d = dist;
+                //compute time to target
+            this.targets_visited.put(i, 0);
+            List<Double> tmp_time = new ArrayList<Double>();
+            for(int j = 0; j < this.targets.size(); j++){
+                double dist2 = Point.getDistance(this.targets.get(i), this.targets.get(j));
+                double speed2 = Simulator.getSpeed(Point.getDirection(this.targets.get(i), this.targets.get(j)), wind_direction);
+                double time2 = dist2/speed2;
+                tmp_time.add(time2);
+            }
+            //System.out.println(tmp_time);
+            this.target_dist_map.put(i, tmp_time);
+
+            double dist = Point.getDistance(this.initial, this.targets.get(i));
+            double speed = Simulator.getSpeed(Point.getDirection(this.initial, targets.get(i)), wind_direction);
+            double time = dist/speed;
+
+            //get shortest time
+            if(tempTime > time || tempTime == -1) {
+                tempTime = time;
                 result = i;
             }
         }
+        this.curr_target_ind = result;
         this.current_target = this.targets.get(result);
-       
         this.id = id;
         this.num_visited = 0;
-        this.num_players = group_locations.size();
+
     }
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
-        // testing timeouts... 
+        // testing timeouts...
         // try {
         //     TimeUnit.MILLISECONDS.sleep(1);
         // } catch(Exception ex) {
         //     ;
         // }
-        // just for the last turn 
+        // just for the last turn
+
+        //keep track of coordinate at a specific time
+        //empty memory before updating coordinates
+        memory.clear();
+        for (int i= 0; i < this.num_players; i++) {
+          memory.add(group_locations.get(i));
+        }
+
         if(visited_set != null && visited_set.get(id).size() == targets.size()) {
-            //this is if finished visiting all
+            //this is if finished visiting all targets
             this.current_target =  this.initial;
         } else{
             //pick a target
             //if(visited_set != null && visited_set.get(id).size() > this.num_visited){
-            int max_visit = 0;
-            for(int i = 0; i < this.num_players; i++){
-                if(visited_set != null && visited_set.get(i).size() > max_visit){
-                    max_visit = visited_set.get(i).size();
-                }
+            // int max_visit = 0;
+            // for(int i = 0; i < this.num_players; i++){
+            //     if(visited_set != null && visited_set.get(i).size() > max_visit){
+            //         max_visit = visited_set.get(i).size();
+            //     }
+            // }
+            if(visited_set != null && this.num_visited < visited_set.get(id).size()){
+                // boolean change = 0;
+                // while(this.current_tar.size() != 0){
+                //     if(this.current_target.get(0))
+                // }
+                this.current_target = computeTarget(group_locations,visited_set);
+                this.num_visited = visited_set.get(id).size();
+                //System.out.println("g2 has visited: " + visited_set.get(id).size() + " " + this.current_target.x + " " + this.current_target.y);
             }
-            if(visited_set != null && max_visit < this.targets.size()*0.8){//greedy distance with weights
-                this.current_target = computeTarget(group_locations.get(id),visited_set);
-                //System.out.println("weight");
-            }
-            else if(visited_set != null){//simple greedy distance
-                 this.current_target = computeTargetEnd(group_locations.get(id),visited_set);
-                 //System.out.println("dist");
-            }
+
 
         }
             double max_proj = 0;
             Point target = Point.getDirection(
                 group_locations.get(id),
                 this.current_target);
+            //System.out.println(Point.angleBetweenVectors(target, wind_direction));
             Point result = target;
+            //set temp time for comparing
+            double tempTime = -1;
             //optimize the angle to the target
-            for(int i = -90; i <= 90; i+=1){
+            //tuning degrees (we tried 90, 30)
+            // for(int i = 0; i < this.targets.size(); i++){
+            //     if(!visited_set.get(id).contains(i) && Point.getDistance(group_locations.get(id), this.targets.get(i)) <= dt*Point.getSpeed(target,wind_direction))){
+            //         current_tar.add(0,this.targets.get(i));
+            //         this.current_target = this.targets.get(i);
+            //     }
+            // }
+            if(Point.angleBetweenVectors(target, wind_direction) < Math.PI / 6 || Point.angleBetweenVectors(target, wind_direction) > Math.PI*11/6  ||
+             (Point.angleBetweenVectors(target, wind_direction) > Math.PI*5/6 && Point.angleBetweenVectors(target, wind_direction) < Math.PI*7/6 )){
+            for(int i = -90; i <= 90; i+=2){
                 double tmp_angle = i * Math.PI / 180;
                 Point tmp_direction = angleToDirection(target, tmp_angle);
-                tmp_direction = tmp_direction.getUnitVector(tmp_direction);
+                tmp_direction = Point.getUnitVector(tmp_direction);
                 double speed = getSpeed(tmp_direction,wind_direction);
                 Point distanceMoved = new Point(
-                    tmp_direction.x * speed * dt, 
+                    tmp_direction.x * speed * dt,
                     tmp_direction.y * speed * dt
                 );
                 Point nextLocation = Point.sum(group_locations.get(id), distanceMoved);
                 if(nextLocation.x >= 0 && nextLocation.y <= 10 &&
             nextLocation.y >= 0 && nextLocation.x <= 10) {
-                    double proj = getProjection(tmp_direction, target, wind_direction);
-                    //System.out.println(proj);
-                    if(proj > max_proj){
-                        //System.out.println("find better direction! " + tmp_direction.x + " " + tmp_direction.y);
-                        max_proj = proj;
-                        result = tmp_direction;
+
+                  //optimize base on time
+                    double dist = Point.getDistance(nextLocation, this.current_target);
+                    double speed2 = Simulator.getSpeed(Point.getDirection(nextLocation, this.current_target), wind_direction);
+                    double time = dist/speed2;
+                    if (tempTime > time || tempTime ==-1) {
+                      tempTime = time;
+                      result = tmp_direction;
                     }
                 }
             }
+        }
             //System.out.println("target: " + target.x + " " + target.y + " our choice: " + result.x + " " + result.y);
             return result;
     }
@@ -136,57 +216,144 @@ public class Player extends sail.sim.Player {
         return Math.sqrt((x)*(x) + (y)*(y));
     }
 
+    // this is to maximize the speed to decrease distance TO the target
+    // i.e. how to move to the target in shortest time
     public double getProjection(Point p, Point target_direction, Point wind_direction){
         double speed = getSpeed(p,wind_direction);
         double angle = Point.angleBetweenVectors(p, target_direction);
         return speed*Math.cos(angle);
     }
 
-    //counterclock wise is positive
+    // counterclock wise is positive
     public Point angleToDirection(Point start, double angle){
         return new Point(start.x*Math.cos(angle) - start.y*Math.sin(angle), start.x*Math.sin(angle) + start.y*Math.cos(angle));
-    } 
-
-    public double getDistance(Point first, Point second) {
-        double dist_square = (first.x - second.x)*(first.x - second.x) + (first.y - second.y)*(first.y - second.y);
-        double dist = Math.sqrt(dist_square);
-        return dist;
     }
 
-    public Point computeTarget(Point loc, Map<Integer, Set<Integer>> visited_set){
+    public Point computeTarget(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set){
         int result = -1;
+        Point loc = group_locations.get(id);
         double d = -1;
+        double tempTime = -1;
         for(int i = 0; i < this.targets.size(); i++){
-            if(!visited_set.get(id).contains(i)){
                 int count = 0;
                 for(int k = 0 ; k < this.num_players; k++){
                     if(visited_set.get(k).contains(i)){
                         count+=1;
                     }
                 }
-                //take into consideration about the number of visits to the target
-                double dist = getDistance(loc, this.targets.get(i)) + (count - this.num_players);
-                if(dist < d || d == -1){
-                    d = dist;
-                    result = i;
-                }
-            }
+                this.targets_visited.put(i, count);
         }
-        return new Point(this.targets.get(result).x, this.targets.get(result).y);
-    }
-    public Point computeTargetEnd(Point loc, Map<Integer, Set<Integer>> visited_set){
-        int result = -1;
-        double d = -1;
         for(int i = 0; i < this.targets.size(); i++){
-            if(!visited_set.get(id).contains(i)){
-                //take into consideration about the number of visits to the target
-                double dist = getDistance(loc, this.targets.get(i));
-                if(dist < d || d == -1){
-                    d = dist;
+             if(!visited_set.get(id).contains(i)){
+                //compute time to target
+                double dist = Point.getDistance(loc, this.targets.get(i));
+                double speed = Simulator.getSpeed(Point.getDirection(loc, targets.get(i)), wind_direction);
+                double time = (dist)/speed;
+
+                if(second_stage ==false){
+                    //count how many other players are around the target
+                    int count1 = 0;
+                    //System.out.println("This is our ID size: " + visited_set.get(id).size() + " " + this.targets.size());
+
+                    //switching to nearest neighbor after .8 of our own traversal
+                    if(visited_set.get(id).size() >= 0.8*this.targets.size()) {
+                      //System.out.println("WE JUST CHANGED STRATEGY");
+                      second_stage = true;
+                    }
+
+                    //System.out.println("second stage is: " + second_stage);
+
+                    for(int j = 0; j < num_players; j++){
+                        if(j != id && !visited_set.get(j).contains(i)){
+                            double currDist = Point.getDistance(group_locations.get(j), this.targets.get(i));
+                            double currSpeed = Simulator.getSpeed(Point.getDirection(group_locations.get(j), targets.get(i)), wind_direction);
+                            double currTime = (currDist)/currSpeed ;
+
+                            double prevDist = Point.getDistance(this.memory.get(j), this.targets.get(i));
+                            double prevSpeed = Simulator.getSpeed(Point.getDirection(this.memory.get(j), targets.get(i)), wind_direction);
+                            double prevTime = (prevDist)/prevSpeed ;
+
+                            // double time1 = this.target_dist_map.get(i).get(j);
+                            if(currTime < time && currTime<prevTime ) count1+=1;
+
+                            //if(currTime < time) count1+=1;
+
+                            // make use of memory to give us a better sense of where to go
+                            // Point figureDirection = Point.getDirection(memory.get(j), group_locations.get(j));
+                        }
+
+                    }
+                    // int count2 = 0;
+                    //     List<Double> neighbor_time = this.target_dist_map.get(this.curr_target_ind);
+                    //     for(int p = 0; p < neighbor_time.size(); p++){
+                    //         if(!visited_set.get(id).contains(p) && p!=i){
+                    //             if(neighbor_time.get(p) < 0.5*time){
+                    //                 count2+=1;
+                    //             }
+                    //         }
+                    //     }
+                    //think about the next target
+                    List<Integer> tmp_t = new ArrayList<Integer>();
+                    int current_id = i;
+                    double next_step_time = 0;
+                    int next_step_score = 0;
+                    while(tmp_t.size() < 3){
+                      List<Double> next_time = this.target_dist_map.get(current_id);
+                      int next_ind = -1;
+                      double next_t = -1;
+
+                      for(int p = 0; p < next_time.size(); p++){
+                          if(!visited_set.get(id).contains(p) && p!=i){
+                              if(((num_players-this.targets_visited.get(p))/next_time.get(p) < next_t && !tmp_t.contains(p)) || next_t == -1){
+                                  next_t = (num_players-this.targets_visited.get(p))/next_time.get(p);
+                                  next_ind = p;
+                              }
+                          }
+                      }
+                      if(next_ind != -1){
+                        next_step_time += next_time.get(next_ind);
+                        next_step_score += (num_players-this.targets_visited.get(next_ind));
+                      }
+                      tmp_t.add(next_ind);
+                      current_id = next_ind;
+                    }
+
+                    //maximizing measure
+                    //took out .7 weight for count1 because we took into account prev time to current time
+                    //took out count2 - waiting for Ananth's implementation
+                    double measure = ((num_players-this.targets_visited.get(i)) - count1)/time;
+                    double measure1 = next_step_score/next_step_time;
+                    // if( measure + 0.3*next_t > tempTime || tempTime == -1){
+                    //     tempTime = measure;
+                    //     result = i;
+                    // }
+                    if( measure + 0.4*measure1 > tempTime || tempTime == -1){
+                        tempTime = measure;
+                        result = i;
+                    }
+
+            } else {
+              double minTime = -1;
+              result = -1;
+              //get nearest neighbor when we switch strat
+              for (i=0; i<this.targets.size(); i++) {
+                if (!visited_set.get(id).contains(i)) {
+                  double currDist = Point.getDistance(group_locations.get(id), this.targets.get(i));
+                  double currSpeed = Simulator.getSpeed(Point.getDirection(group_locations.get(id), targets.get(i)), wind_direction);
+                  double currTime = (currDist)/currSpeed ;
+
+                  if (minTime > currTime || minTime == -1) {
                     result = i;
+                    minTime = currTime;
+                  }
                 }
-            }
+              }
+
+            }//else
+          }
         }
+        this.curr_target_ind = result;
         return new Point(this.targets.get(result).x, this.targets.get(result).y);
     }
+
 }
