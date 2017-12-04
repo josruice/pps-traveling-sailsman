@@ -121,8 +121,8 @@ for num_targets, time_step, time_limit, repetition in env_vars:
 	if len(last_score_rounds) > 0:
 		print('We have been LAST for the following runs: \n - ')
 		print('\n - '.join(last_score_rounds))
-# print()
-# if len(not_best_score_rounds) > 0:
-#     print('We have been NOT FIRST for the following runs: \n - ', end='')
-#     print('\n - '.join(not_best_score_rounds))
-    print('\n')
+	print()
+	if len(not_best_score_rounds) > 0:
+		print('We have been NOT FIRST for the following runs: \n - ')
+		print('\n - '.join(not_best_score_rounds))
+	print('\n')

@@ -18,6 +18,8 @@ public class Player extends sail.sim.Player {
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
+    
+    final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
     final String STRATEGY = "mst"; // One of: greedy, weightedGreedy, mst
     
     MST mst;
@@ -31,10 +33,48 @@ public class Player extends sail.sim.Player {
         // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
         gen = new Random(seed);
-        initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
-        double speed = Simulator.getSpeed(initialLocation, windDirection);
         this.numTargets = t;
         this.windDirection = windDirection;
+        switch (INITIAL_POINT) {
+        case "random":
+            initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+            break;
+        case "middle":
+            initialLocation = new Point(5.0, 5.0);
+            break;
+        case "windMiddle":
+            // The middle point wrt the wind lies in the line that follows the wind vector, upwind direction,
+            // at 1/3 of the distance from the center (5,5) to the edges of the board.
+            // To compute it, first we need the unit vector that represents the wind direction.
+            Point unitWind = Point.getUnitVector(windDirection);
+
+            // Now, we need the distance of the edges of the board in this direction. If the angle of the wind
+            // wrt to the x-axis is multiple of 90º, then the solution is trivial, since the distance is 5 km.
+            // For the rest of the cases, we need some trigonometry.
+            Point xAxisVector = new Point(1,0);
+
+            // Rotate the wind so that it is a vector in the first quadrant. This works because of symmetry and
+            // it helps to simplify things.
+            Point absUnitWind = new Point(Math.abs(unitWind.x), Math.abs(unitWind.y));
+
+            double alpha = Point.angleBetweenVectors(xAxisVector, absUnitWind);
+            double distanceToEdge = 5.0;
+            if (alpha <= Math.PI / 4) { // alpha <= 45º
+                distanceToEdge /= Math.cos(alpha);
+            } else { // 45º < alpha <= 90º
+                distanceToEdge /= Math.sin(alpha);
+            }
+
+            // Now we have everything we need.
+            initialLocation = new Point(
+                    5 + (1./3 * distanceToEdge) * unitWind.x,
+                    5 + (1./3 * distanceToEdge) * unitWind.y
+            );
+            break;
+        default:
+            System.err.println("Invalid initial point "+INITIAL_POINT+" chosen");
+            initialLocation = new Point(0, 0);
+    }
         // initialLocation = new Point(5.0, 5.0); // Use the middle point as initial location.
         return initialLocation;
     }
@@ -159,10 +199,12 @@ public class Player extends sail.sim.Player {
     	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
     	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
     	
-    	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
+//    	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
 //    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
-    	Point unitDirection = Point.getUnitVector(direction);
-    	return unitDirection;
+//    	Point unitDirection = Point.getUnitVector(direction);
+//    	return unitDirection;
+    	
+    	return computeNextDirection(pointWithin10MetersDirection,timeStep);
     }
 
     public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
