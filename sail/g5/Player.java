@@ -19,9 +19,16 @@ public class Player extends sail.sim.Player {
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
+    
+    
+    MST mst;
+    double[][] graph;
+    Tree tree;
+    ArrayList<Integer> path;
+    
 
     final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
-    final String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy
+    String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy, mst
 
     // Enable or disable different Weighted Greedy params, to compare results.
     final boolean WG_SCORE_ENABLED = true;
@@ -39,6 +46,11 @@ public class Player extends sail.sim.Player {
         gen = new Random(seed);
 
         this.windDirection = windDirection;
+        
+        if(this.numTargets >= 500){
+        	STRATEGY = "mst";
+        }
+        
         switch (INITIAL_POINT) {
             case "random":
                 initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
@@ -106,6 +118,29 @@ public class Player extends sail.sim.Player {
             Set<Integer> playerVisits = new HashSet<Integer>();
             this.playerVisitsByTarget.put(targetId, playerVisits);
         }
+        
+        
+        if(STRATEGY == "mst"){
+        	ArrayList<Point> targetsClone = new ArrayList<Point>();
+        	for(Point target: targets){
+        		targetsClone.add(target);
+        	}
+        	targetsClone.add(initialLocation);
+        	
+	        mst = new MST();
+	        graph = new double[numTargets + 1][numTargets + 1];
+	        for(int i = 0; i < numTargets + 1; i++){
+	        	for(int j = 0; j < numTargets + 1; j++){
+	        		graph[i][j] = computeEstimatedTimeToTarget(targetsClone.get(i), targetsClone.get(j));
+	        	}
+	        }
+	        int[] parents = mst.primMST(graph);
+	        buildTree(parents);
+	        path = new ArrayList<Integer>();
+	        tree.preorder(path);
+	        
+	        path.remove(0);
+        }
     }
 
     @Override
@@ -117,6 +152,8 @@ public class Player extends sail.sim.Player {
                 return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
             case "weightedGreedy":
                 return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "mst":
+            	return mstMove(groupLocations, id, timeStep, timeRemainingMs);
             default:
                 System.err.println("Invalid strategy "+STRATEGY+" chosen");
                 return new Point(0,0);
@@ -181,6 +218,64 @@ public class Player extends sail.sim.Player {
         }
 
         return computeNextDirection(nextTarget, timeStep);
+    }
+    
+    public Point mstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+    	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
+    		path.remove(0);
+    	
+    	if(path.size() == 0){
+    		Point direction = Point.getDirection(currentLocation,initialLocation);
+    		Point unitDirection = Point.getUnitVector(direction);
+        	return unitDirection;    		
+    	}
+    	
+    	int targetIndex = path.get(0);
+    	Point target = targets.get(targetIndex);
+    	Point nextTarget = initialLocation;
+    	if(path.size() >= 2){
+        	int nextTargetIndex = path.get(1);
+        	nextTarget = targets.get(nextTargetIndex);
+    	}
+    	
+    	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
+    	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
+    	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
+    	
+    	return computeNextDirection(pointWithin10MetersDirection,timeStep);
+    }
+    
+    public void buildTree(int[] parents){    	
+    	tree = new Tree();
+    	int rootIndex = findRootIndexOfMST(parents);
+    	tree.root = new Node(rootIndex);
+    	tree.root.children = findChildren(rootIndex, parents);    	
+    }
+    
+    public int findRootIndexOfMST(int[] parents){
+    	for(int i = 0; i < numTargets; i++){
+    		if(parents[i] == -1){
+    			return i;
+    		}
+    	}
+    	return -1;
+    }
+    
+    public ArrayList<Node> findChildren(int rootIndex, int[] parents){
+    	ArrayList<Node> children = null;
+    	
+    	for(int i = 0; i < parents.length; i++){
+    		if(parents[i] == rootIndex){
+    			Node child = new Node(i);
+    			child.children = findChildren(i, parents);
+    			
+    			if(children == null)
+    				children = new ArrayList<Node>();
+    			children.add(child);
+    		}
+    	}
+    	
+    	return children;
     }
 
     private double computeWeightedTimeToOtherTargets(int targetId, List<Point> targets) {
