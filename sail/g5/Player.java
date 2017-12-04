@@ -10,6 +10,7 @@ public class Player extends sail.sim.Player {
     Map<Integer, Set<Integer>> visitedTargets; // For every player, store which targets he has visited.
     Map<Integer, Set<Integer>> unvisitedTargets; // For every player, store which target he has NOT visited.
     Map<Integer, Set<Integer>> playerVisitsByTarget; // For every target, store which players have visited it (been received).
+    Set<Point> ourVisitedTargets;
     Set<Integer> ourUnvisitedTargets;
     Random gen;
     int id;
@@ -20,8 +21,11 @@ public class Player extends sail.sim.Player {
     Point currentLocation;
     Point windDirection;
 
+    boolean firstTurn;
+    List<Point> visitsOrder;
+
     final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
-    final String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy
+    final String STRATEGY = "tsp"; // One of: greedy, weightedGreedy, tsp
 
     // Enable or disable different Weighted Greedy params, to compare results.
     final boolean WG_SCORE_ENABLED = true;
@@ -88,6 +92,7 @@ public class Player extends sail.sim.Player {
         this.id = id;
         this.numPlayers = groupLocations.size();
         this.initialTimeRemaining = null;
+        this.firstTurn = true;
 
         // Initialize unvisited targets by player map.
         this.unvisitedTargets = new HashMap<Integer, Set<Integer>>();
@@ -99,6 +104,7 @@ public class Player extends sail.sim.Player {
             this.unvisitedTargets.put(playerId, playerUnvisited);
         }
         this.ourUnvisitedTargets = this.unvisitedTargets.get(this.id);
+        this.ourVisitedTargets = new HashSet<Point>();
 
         // Initialize player visits by target map.
         this.playerVisitsByTarget = new HashMap<Integer, Set<Integer>>();
@@ -117,10 +123,53 @@ public class Player extends sail.sim.Player {
                 return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
             case "weightedGreedy":
                 return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "tsp":
+                return tspMove(groupLocations, id, timeStep, timeRemainingMs);
             default:
                 System.err.println("Invalid strategy "+STRATEGY+" chosen");
                 return new Point(0,0);
         }
+    }
+
+    private void greedy2DSort (List<Point> points) {
+        for (int i = 1; i < points.size(); i++) {
+            Point currentPoint = points.get(i-1);
+
+            int minIndex = 0;
+            double minDistance = Double.POSITIVE_INFINITY;
+            double distance;
+            for (int j = i; j < points.size(); j++) {
+                distance = computeEstimatedTimeToTarget(currentPoint, points.get(j));
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    minIndex = j;
+                }
+            }
+            Point tempPoint = points.get(i);
+            points.set(i, points.get(minIndex));
+            points.set(minIndex, tempPoint);
+        }
+    }
+
+    public Point tspMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
+        if (this.firstTurn) {
+            ArrayList<Point> allPoints = new ArrayList<Point>(this.targets);
+            allPoints.add(0, this.initialLocation);
+            greedy2DSort(allPoints);
+            TSP tsp = new TSP(allPoints, this.windDirection);
+            this.visitsOrder = tsp.simulateAnnealing(100000, 100000, 0.999);
+            this.visitsOrder.remove(0); // Remove the initial location.
+            this.firstTurn = false;
+        }
+
+        Point nextToVisit = this.initialLocation;
+        for (Point targetInPath : this.visitsOrder) {
+            if (!this.ourVisitedTargets.contains(targetInPath)) {
+                nextToVisit = targetInPath;
+                break;
+            }
+        }
+        return computeNextDirection(nextToVisit, timeStep);
     }
 
     public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
@@ -292,6 +341,7 @@ public class Player extends sail.sim.Player {
         //  - For every player, unvisited targets, with a special variable pointing to ours.
         //  - For every target, players that have visited it. This will help compute potential score easily.
         this.visitedTargets = visitedTargets;
+        this.ourVisitedTargets = new HashSet<Point>();
 
         for (Integer playerId : visitedTargets.keySet()) {
             Set<Integer> playerVisited = this.visitedTargets.get(playerId);
@@ -300,6 +350,9 @@ public class Player extends sail.sim.Player {
 
             for (Integer target : playerVisited) {
                 this.playerVisitsByTarget.get(target).add(playerId);
+                if (playerId == this.id) {
+                    ourVisitedTargets.add(this.targets.get(target));
+                }
             }
         }
     }
