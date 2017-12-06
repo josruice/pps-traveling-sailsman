@@ -150,7 +150,7 @@ public class Player extends sail.sim.Player {
 	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
 	        	}
 	        }
-	        cluster(10,3);
+	        cluster(10,2);
 	        currentCluster = findNextUnvisitedCluster(groupLocations);
 	        computePathInCluster();
 	        
@@ -164,7 +164,7 @@ public class Player extends sail.sim.Player {
 	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
 	        	}
 	        }
-	        cluster(5,1);
+	        cluster(10,2);
 	        currentCluster = findNextUnvisitedCluster(groupLocations);
 	        path = currentCluster.clusterPoints;
         }
@@ -204,13 +204,23 @@ public class Player extends sail.sim.Player {
     	ArrayList<ArrayList<Integer>> clustersList = clusterer.performClustering();
     	
     	for(ArrayList<Integer> clusterPoints: clustersList){
-    		clusters.add(new ClusterInfo(clusterPoints));
+    		Point mean = new Point(0,0);
+    		for(int targetId: clusterPoints){
+    			mean = Point.sum(mean, targets.get(targetId));
+    		}
+    		mean = Point.multiply(mean, 1/clusterPoints.size());
+    		clusters.add(new ClusterInfo(clusterPoints, mean));
     	}
     }
 
     @Override
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
         this.currentLocation = groupLocations.get(id);
+        
+        if(unvisitedTargets.size() < 100){
+        	STRATEGY = "weightedGreedy";
+        }
+        
         switch (STRATEGY) {
             case "greedy":
                 return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
@@ -335,12 +345,25 @@ public class Player extends sail.sim.Player {
   //TODO: After reaching nearest point of cluster, run mst
     public double computeClusterHeuristic(ClusterInfo clustering, List<Point> groupLocations){
     	double time = clustering.timeToCluster;
-    	int numPoints = clustering.clusterPoints.size();
+    	ArrayList<Integer> clusterPoints = clustering.clusterPoints;
+    	Point mean = clustering.clusterMean;
+//    	int numPoints = clustering.clusterPoints.size();
+    	double distanceFromMid = Point.getDistance(mean, new Point(5,5));
+    	double heuristic = 0;
     	
-    	System.out.println("time: " + time);
-    	System.out.println("Num Points: " + numPoints);
+    	for(int targetId: clusterPoints){
+//	    	double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
+	        int score = computeRemainingScore(targetId);
+	        double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+	
+	        heuristic += score * othersTime;
+    	}
     	
-    	double heuristic = 5/time + numPoints;
+//    	System.out.println("time: " + time);
+//    	System.out.println("Num Points: " + numPoints);
+    	
+    	heuristic = heuristic + 15*time + 50/distanceFromMid;
+//    	double heuristic = 5/time + numPoints;
     	return heuristic;
     }
     

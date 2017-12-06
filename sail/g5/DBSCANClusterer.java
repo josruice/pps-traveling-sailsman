@@ -239,6 +239,7 @@ public class DBSCANClusterer<V> {
 					//TODO: Take this outside this block
 					resultList.add(neighbours);
 				}
+//				resultList.add(neighbours);
 			}
 			index++;
 		}

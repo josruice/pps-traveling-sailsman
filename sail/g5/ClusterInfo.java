@@ -7,11 +7,17 @@ import sail.sim.Point;
 
 public class ClusterInfo {
 	ArrayList<Integer> clusterPoints;
+	public Point clusterMean;
 	public Point closestClusterPoint;
 	public double timeToCluster;
 	public double clusterHeuristic;
 	
 	public ClusterInfo(ArrayList<Integer> clusterPoints){
 		this.clusterPoints = clusterPoints;
+	}
+	
+	public ClusterInfo(ArrayList<Integer> clusterPoints, Point mean){
+		this.clusterPoints = clusterPoints;
+		this.clusterMean = mean;
 	}
 }
