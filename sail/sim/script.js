@@ -1,18 +1,18 @@
 function undraw()
 {
-	var canvas = document.getElementById("canvas");
-	var ctx = canvas.getContext("2d");
-	ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
 function draw_grid(min_x, min_y, max_x, max_y, rows, cols)
 {
-	var canvas = document.getElementById("canvas");
-	var ctx = canvas.getContext("2d");
-	if (min_x < 0 || max_x > canvas.width)
-		throw "Invalid x-axis bounds: " + min_x + " - " + max_x;
-	if (min_y < 0 || max_y > canvas.height)
-		throw "Invalid y-axis bounds: " + min_y + " - " + max_y;
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    if (min_x < 0 || max_x > canvas.width)
+        throw "Invalid x-axis bounds: " + min_x + " - " + max_x;
+    if (min_y < 0 || max_y > canvas.height)
+        throw "Invalid y-axis bounds: " + min_y + " - " + max_y;
     // draw vertical lines
     for (var col = 0 ; col <= cols ; ++col) {
         ctx.beginPath();
@@ -51,7 +51,7 @@ function draw_dots(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         //    min_y + ycoords[i] * (max_y - min_y) / rows );
         if(showID) {
             radius = 2;
-            
+
         } else {
             radius = 5;
             ctx.arc(
@@ -74,7 +74,7 @@ function draw_dots(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.lineWidth = 1;
         ctx.strokeStyle = "black";
         ctx.strokeText(i+1,        min_x + (max_x - min_x) * xcoords[i]/10 + 1,min_y + (max_y - min_y) * ycoords[i]/10- 1);
-        
+
     }
 }
 
@@ -85,14 +85,14 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         oy = min_y + (max_y - min_y) * ycoords[i]/10;
         w = 12
         h = 12;
-        
+
         ctx.beginPath();
         ctx.moveTo(ox - w/2, oy + h/4);
         ctx.lineTo(ox - w/4, oy + h/2);
         ctx.lineTo(ox + w/4, oy + h/2);
         ctx.lineTo(ox + w/2, oy + h/4);
         ctx.closePath();
-        ctx.strokeStyle = "black";
+        ctx.strokeStyle = colors[i % numcols];
         ctx.fillStyle = colors[i%numcols];
         ctx.lineWidth = 3;
         ctx.stroke();
@@ -113,12 +113,12 @@ function draw_boat(min_x, min_y, max_x, max_y, num, xcoords, ycoords, numcols, c
         ctx.fillStyle = colors[i % numcols];
         ctx.fill();
 
-        ctx.font = "14px Arial";
+        ctx.font = "16px Arial";
         ctx.textAlign = "left";
         ctx.lineWidth = 1;
-        ctx.strokeStyle = "black";
+        ctx.strokeStyle = colors[i % numcols];
         ctx.strokeText(i+1,        min_x + (max_x - min_x) * xcoords[i]/10 + 5,min_y + (max_y - min_y) * ycoords[i]/10- 5);
-        
+
     }
 }
 
@@ -217,15 +217,15 @@ function draw_outpost(min_x, min_y, max_x, max_y, rows, cols) {
 
 function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx ,windy, sorted_groups)
 {
-	var canvas = document.getElementById("canvas");
-	var ctx = canvas.getContext("2d");
-	if (min_x < 0 || max_x > canvas.width)
-		throw "Invalid x-axis bounds: " + min_x + " - " + max_x;
-	if (min_y < 0 || max_y > canvas.height)
-		throw "Invalid y-axis bounds: " + min_y + " - " + max_y;
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    if (min_x < 0 || max_x > canvas.width)
+        throw "Invalid x-axis bounds: " + min_x + " - " + max_x;
+    if (min_y < 0 || max_y > canvas.height)
+        throw "Invalid y-axis bounds: " + min_y + " - " + max_y;
     // draw message
 
-    
+
 
     ctx.beginPath();
     radius = 20
@@ -261,7 +261,7 @@ function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx
     for(var i = 0 ; i < n ; ++ i) {
         ctx.font = "32px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = colors[i];
         ctx.strokeText(groups[i] + ": " + scores[i],        min_x, min_y + 30*(3+i));
         // ctx.strokeText("CPU time: " + cpu + " s", min_x, min_y + 90);
@@ -271,9 +271,9 @@ function draw_side(min_x, min_y, max_x, max_y, n, groups,  colors, scores, windx
     for(var i = 0 ; i < n ; ++ i) {
         ctx.font = "32px Arial";
         ctx.textAlign = "left";
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = colors[sorted_groups[n-1-i]];
-        ctx.strokeText("Rank " + (i+1) + ": " + groups[sorted_groups[n-1-i]],        min_x, min_y + 30*(3+i+n));
+        ctx.strokeText("Rank " + (i+1) + ": " + groups[sorted_groups[n-1-i]],        min_x, min_y + 30*(3+i+(n*1.5)));
         // ctx.strokeText("CPU time: " + cpu + " s", min_x, min_y + 90);
         // ctx.strokeText("Legend:", min_x, min_y + 150);
         ctx.fillStyle = colors[i];
@@ -341,8 +341,8 @@ function process(data)
     var maxy = 650;
     draw_grid(300, 50, 900, 650,1, 1, "black");
     // draw for 1st player
-    var colors = ["orange",  "purple", "green", "darkblue", "black","lightseagreen", "darkgoldenrod"];
-    
+    var colors = ["orange",  "purple", "green", "darkblue", "black", "lightseagreen", "darkgoldenrod"];
+
     draw_landmarks(minx, miny, maxx, maxy, t, tx, ty, num_on_targets, n);
     draw_dots(minx, miny, maxx, maxy, n, initplayerx, initplayery, 1, ["black"], true);
     draw_boat(minx, miny, maxx, maxy, n, playerx, playery, 7, colors);
@@ -356,39 +356,39 @@ var latest_version = -1;
 
 function ajax(version, retries, timeout)
 {
-	var xhr = new XMLHttpRequest();
-	xhr.onload = (function() {
-		var refresh = -1;
-		try {
-			if (xhr.readyState != 4)
-				throw "Incomplete HTTP request: " + xhr.readyState;
-			if (xhr.status != 200)
-				throw "Invalid HTTP status: " + xhr.status;
-			refresh = process(xhr.responseText);
-			if (latest_version < version && paused == 0)
-				latest_version = version;
-			else
-				refresh = -1;
-		} catch (message) { alert(message); }
-		if (refresh >= 0)
-			setTimeout(function() { ajax(version + 1, 10, 100); }, refresh);
-	});
-	xhr.onabort   = (function() { location.reload(true); });
-	xhr.onerror   = (function() { location.reload(true); });
-	xhr.ontimeout = (function() {
-		if (version <= latest_version)
-			console.log("AJAX timeout (version " + version + " <= " + latest_version + ")");
-		else if (retries == 0)
-			location.reload(true);
-		else {
-			console.log("AJAX timeout (version " + version + ", retries: " + retries + ")");
-			ajax(version, retries - 1, timeout * 2);
-		}
-	});
-	xhr.open("GET", "data.txt", true);
-	xhr.responseType = "text";
-	xhr.timeout = timeout;
-	xhr.send();
+    var xhr = new XMLHttpRequest();
+    xhr.onload = (function() {
+        var refresh = -1;
+        try {
+            if (xhr.readyState != 4)
+                throw "Incomplete HTTP request: " + xhr.readyState;
+            if (xhr.status != 200)
+                throw "Invalid HTTP status: " + xhr.status;
+            refresh = process(xhr.responseText);
+            if (latest_version < version && paused == 0)
+                latest_version = version;
+            else
+                refresh = -1;
+        } catch (message) { alert(message); }
+        if (refresh >= 0)
+            setTimeout(function() { ajax(version + 1, 10, 100); }, refresh);
+    });
+    xhr.onabort   = (function() { location.reload(true); });
+    xhr.onerror   = (function() { location.reload(true); });
+    xhr.ontimeout = (function() {
+        if (version <= latest_version)
+            console.log("AJAX timeout (version " + version + " <= " + latest_version + ")");
+        else if (retries == 0)
+            location.reload(true);
+        else {
+            console.log("AJAX timeout (version " + version + ", retries: " + retries + ")");
+            ajax(version, retries - 1, timeout * 2);
+        }
+    });
+    xhr.open("GET", "data.txt", true);
+    xhr.responseType = "text";
+    xhr.timeout = timeout;
+    xhr.send();
 }
 
 function pause() {
