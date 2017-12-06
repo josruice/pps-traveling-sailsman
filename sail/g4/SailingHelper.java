@@ -4,7 +4,17 @@ import sail.sim.Point;
 import sail.sim.Simulator;
 import java.util.*;
 
+
+
 public class SailingHelper {
+
+public class TargetStats {
+
+    public int targetIndex;
+    public double timeToTarget;
+    public double distToTarget;
+    public double heuristic;
+}
 
 	public final double WINDSPEED = 50.0;
 	List<Point> targets;
@@ -12,7 +22,7 @@ public class SailingHelper {
     Point initial;
     Point wind_direction;
     double wind_angle;
-    Double heurisitc_coefficient = 0.2;
+
     public SailingHelper(List<Point> targets, int id, Point initial, Point wind_direction, double wind_angle)	{
     	this.targets = targets;
     	this.id = id;
@@ -20,110 +30,14 @@ public class SailingHelper {
     	this.wind_direction = wind_direction;
     	this.wind_angle = wind_angle;
     }
-
-    public int valueOf(int targetIndex, HashMap<Integer, Set<Integer>> visited_set) {
-        return -1;
-    }
-    public double relativeDistance(List<Point> groupLocations, Point target){
-        double dist = 0;
-        for(int p=0;p<groupLocations.size();p++){
-
-            if(p==id){
-                continue;
-            }
-            dist+=Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
-        }
-        return  dist;
-    }
-    public boolean playerWillReachTargetFirst(int p, Point target,List<Point> groupLocations, Point currentLoc){
-        double t1  = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
-        double t2 = Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
-        return t1<=t2;
-    }
+    
     public double squared(double x) {
         return x*x;
     }
 
-    public double getPathDistance(Point currentLoc, ArrayList<Point> path) {
-        double ret = Point.getDistance(currentLoc, path.get(0));
-        for (int i = 1; i < path.size(); i++) {
-            ret += Point.getDistance(path.get(i-1), path.get(i));
-        }
-        return ret;
-    }
-
-    public double getPathDistanceByTime(Point currentLoc, ArrayList<Point> path) {
-        double ret = Point.getDistance(currentLoc, path.get(0))/Simulator.getSpeed(Point.getDirection(currentLoc, path.get(0)), wind_direction);
-        for (int i = 1; i < path.size(); i++) {
-            ret += Point.getDistance(path.get(i-1), path.get(i))/Simulator.getSpeed(Point.getDirection(path.get(i-1), path.get(i)), wind_direction);
-        }
-        return ret;
-    }
-
     public boolean closeToBoundary(Point p, double dt) {
-        // this is a temporary way to tell if it's okay to curve
-        // taking into account the current [bug](removed) units inconsistency in the simulator
         double maxOrthogonalDistanceOfMove = 1.0 * 5.0 * dt;
         return p.x < maxOrthogonalDistanceOfMove || p.y < maxOrthogonalDistanceOfMove || 10.0-p.x < maxOrthogonalDistanceOfMove || 10.0-p.y < maxOrthogonalDistanceOfMove;
-    }
-    // foud on internet
-    public ArrayList<ArrayList<Point>> listPermutations(ArrayList<Point> list) {
-
-        if (list.size() == 0) {
-            ArrayList<ArrayList<Point>> result = new ArrayList<ArrayList<Point>>();
-            result.add(new ArrayList<Point>());
-            return result;
-        }
-        ArrayList<ArrayList<Point>> returnMe = new ArrayList<ArrayList<Point>>();
-        Point firstElement = list.remove(0);
-        ArrayList<ArrayList<Point>> recursiveReturn = listPermutations(list);
-        for (ArrayList<Point> li : recursiveReturn) {
-
-            for (int index = 0; index <= li.size(); index++) {
-                ArrayList<Point> temp = new ArrayList<Point>(li);
-                temp.add(index, firstElement);
-                returnMe.add(temp);
-            }
-        }
-        return returnMe;
-    }
-
-    public ArrayList<Point> findBestPath(Point currentLoc, ArrayList<Point> points) {
-        int ps = points.size();
-        //System.out.println(points.size());
-        double lowestDist = Double.MAX_VALUE;
-        double d;
-        ArrayList<Point> bestPathSoFar = null;
-        for (ArrayList<Point> path : listPermutations(points)) {
-            if (path.size() == ps) {
-                d = getPathDistance(currentLoc, path);
-                //System.out.println(d);
-                if (d < lowestDist) {
-                    lowestDist = d;
-                    bestPathSoFar = path;
-                }
-            }
-        }
-        return bestPathSoFar;
-    }
-
-    public ArrayList<Point> findBestPathByTime(Point currentLoc, ArrayList<Point> points) {
-        int ps = points.size();
-        //System.out.println(points.size());
-        double lowestDist = Double.MAX_VALUE;
-        double d;
-        ArrayList<Point> bestPathSoFar = null;
-        for (ArrayList<Point> path : listPermutations(points)) {
-            if (path.size() == ps) {
-                d = getPathDistanceByTime(currentLoc, path);
-                //System.out.println(d);
-                if (d < lowestDist) {
-                    lowestDist = d;
-                    bestPathSoFar = path;
-                }
-            }
-        }
-        return bestPathSoFar;
     }
 
     public boolean isInsideBox(Point p) {
@@ -147,10 +61,6 @@ public class SailingHelper {
     public double dUtildTheta(double phi, double theta) {
         double small = .00000001;
         return (utilFunction(phi, theta+small) - utilFunction(phi, theta))/small;
-    }
-
-    public double dist(double x1, double y1, double x2, double y2) {
-        return Math.sqrt(squared(x2-x1) + squared(y2-y1));
     }
 
     public Point getUnitVector(double angle) {
@@ -196,6 +106,7 @@ public class SailingHelper {
     }
 
     public double getBestTheta(double phi_abs) {
+
         // find phi, which is the angle we seek to go in, but relative to the wind
         // will convert back at end of function
         // relative_angle = absolute_angle - wind_angle + PI
@@ -240,63 +151,7 @@ public class SailingHelper {
         return Math.sqrt(6.5 - 2.5*Math.cos(theta) + 18.75*squared(Math.sin(theta))) * WINDSPEED;
     }
 
-    public double timeTakenGreedy(double distance, double phi, double dt, double howCloseNeedToBe) {
-        // time taken to travel in the phi-direction for a given distance
-        double timeElapsed = 0.0;
-        double bestTheta;
-        double xDiff, yDiff;
-        double dirToGoal, dirNow, speedNow, distanceLeft;
-        double relativeCurrentX = 0.0;
-        double relativeCurrentY = 0.0;
-        double relativeGoalX = distance*Math.cos(phi);
-        double relativeGoalY = distance*Math.sin(phi);
-        ArrayList<Double> xs = new ArrayList<Double>();
-        ArrayList<Double> ys = new ArrayList<Double>();
-        int count = 0;
-        while (Math.sqrt(squared(relativeGoalX-relativeCurrentX) + squared(relativeGoalY-relativeCurrentY)) > howCloseNeedToBe) {
-        //for (int i = 0; i < 400; i++) {
-            xDiff = relativeGoalX - relativeCurrentX;
-            yDiff = relativeGoalY - relativeCurrentY;
-            dirToGoal = Math.atan2(yDiff, xDiff);
-            //System.out.println("direction to goal: " + dirToGoal);
-            dirNow = getBestTheta(dirToGoal);
-            speedNow = getSpeed(dirNow);
-            relativeCurrentX += dt * speedNow * Math.cos(dirNow);
-            relativeCurrentY += dt * speedNow * Math.sin(dirNow);
-            timeElapsed += dt;
-            distanceLeft = dist(relativeCurrentX, relativeCurrentY, relativeGoalX, relativeGoalY);
-            count++;
-
-        }
-        return timeElapsed;
-    }
-
-    public double timeTakenStraightIncremental(double distance, double phi, double dt, double howCloseNeedToBe) {
-        // time taken to travel in the phi-direction for a given distance
-        double timeElapsed = 0.0;
-        double speedNow;
-        double distanceLeft;
-        double relativeCurrentX = 0.0;
-        double relativeCurrentY = 0.0;
-        double relativeGoalX = distance*Math.cos(phi);
-        double relativeGoalY = distance*Math.sin(phi);
-        while (Math.sqrt(squared(relativeGoalX-relativeCurrentX) + squared(relativeGoalY-relativeCurrentY)) > howCloseNeedToBe) {
-        //for (int i = 0; i < 400; i++) {
-            speedNow = getSpeed(phi);
-            relativeCurrentX += dt * speedNow * Math.cos(phi);
-            relativeCurrentY += dt * speedNow * Math.sin(phi);
-            timeElapsed += dt;
-            distanceLeft = dist(relativeCurrentX, relativeCurrentY, relativeGoalX, relativeGoalY);
-            // xs.add(relativeCurrentX);
-            // ys.add(relativeCurrentY);
-
-        }
-        //System.out.println("Goal was: (" + relativeGoalX + ", " + relativeGoalY + ")");
-        //drawPoints(xs, ys);
-        return timeElapsed;
-    }
-
-    public Point getClosestTarget(ArrayList<Integer> availableTargetIndices, Point currentLoc){
+    public Point getClosestTarget(ArrayList<Integer> availableTargetIndices, Point currentLoc)  {
         Point closest = null;
         double d;
         double minDist = 50*Math.sqrt(2);
@@ -309,6 +164,74 @@ public class SailingHelper {
         }
         return closest;
     }
+
+    public TargetStats getHeuristicDistance(ArrayList<Integer> availableTargetIndices, Point currentLoc, 
+        List<Point> groupLocations, Map<Integer, Set<Integer>> visited_set, int id) {
+
+        TargetStats targetStats = new TargetStats();
+        double maxTargetValue = 0.0;
+        int numPlayers = groupLocations.size();
+        int maxiIndex = availableTargetIndices.get(0);
+
+        for (int targetIndex : availableTargetIndices) {
+                Point target = targets.get(targetIndex);
+
+                double targetRealValue = numPlayers;
+                double targerProjectedValue = numPlayers;
+
+                for (int p = 0; p < numPlayers && visited_set != null; p++) {
+                    if(p == id) continue;
+
+                    Set<Integer> playerVisitedTargets = visited_set.get(p);
+
+                    if(playerVisitedTargets.contains(targetIndex))   {
+                        targetRealValue--;
+                        targerProjectedValue--;
+                    }
+                    else {
+                        if (!playerWillReachTargetFirst(p, target, groupLocations, currentLoc)) {
+                            targerProjectedValue--;
+                        }
+                    }
+                }
+
+                double timeToTarget = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+                double distToTarget = relativeDistance(groupLocations,target);
+                double heuristic = targetRealValue*targerProjectedValue/timeToTarget;
+
+                maxTargetValue = Math.max(maxTargetValue, heuristic);
+                if(maxTargetValue == heuristic){
+                    maxiIndex = targetIndex;
+                    targetStats.targetIndex = targetIndex;
+                    targetStats.timeToTarget = timeToTarget;
+                    targetStats.distToTarget = distToTarget;
+                    targetStats.heuristic = heuristic;
+                }
+            }
+        return targetStats;
+    }
+
+    public double relativeDistance(List<Point> groupLocations, Point target){
+        double dist = 0;
+        for(int p=0;p<groupLocations.size();p++){
+
+            if(p==id){
+                continue;
+            }
+            dist+=Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
+        }
+        return  dist;
+    }
+
+    public boolean playerWillReachTargetFirst(int p, Point target,List<Point> groupLocations, Point currentLoc){
+        double t1  = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+        double t2 = Point.getDistance(groupLocations.get(p), target)/Simulator.getSpeed(Point.getDirection(groupLocations.get(p), target), wind_direction);
+        return t1<=t2;
+    }
+
+    /*
+     * Functions not currently used
+     */
 
     public Point getClosestTargetByTime(ArrayList<Integer> availableTargetIndices, Point currentLoc) {
         Point closest = null;
@@ -323,37 +246,60 @@ public class SailingHelper {
         }
         return closest;
     }
-    public Point getHeuristicDistance(ArrayList<Integer> availableTargetIndices, Point currentLoc,int numPlayers, List<Point> groupLocations) {
 
-        double maxi = 0.0;
-        int maxiIndex = availableTargetIndices.get(0);
-        for (int i : availableTargetIndices) {
-                Point target = targets.get(i);
-                double value = numPlayers;
-                for (int p = 0; p < numPlayers; p++) {
-                    if (!playerWillReachTargetFirst(p,target,groupLocations,currentLoc)) {
-                        value--;
-                    }
-                }
-                //System.out.println(heurisitc_coefficient);
-                //System.out.println((1-heurisitc_coefficient)*10/Point.getDistance(currentLoc, targets.get(i)));
+    public double getPathDistance(Point currentLoc, ArrayList<Point> path) {
+        double ret = Point.getDistance(currentLoc, path.get(0));
+        for (int i = 1; i < path.size(); i++) {
+            ret += Point.getDistance(path.get(i-1), path.get(i));
+        }
+        return ret;
+    }
 
-                double t = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
-//                System.out.println(value);
-//                System.out.println(40.0/t);
-                double heuristic = 0.0;
-                int n = targets.size();
-                double dist = relativeDistance(groupLocations,target);
-                heuristic = value*value*dist/(t*Point.getDistance(currentLoc, target));
+    public double getPathDistanceByTime(Point currentLoc, ArrayList<Point> path) {
+        double ret = Point.getDistance(currentLoc, path.get(0))/Simulator.getSpeed(Point.getDirection(currentLoc, path.get(0)), wind_direction);
+        for (int i = 1; i < path.size(); i++) {
+            ret += Point.getDistance(path.get(i-1), path.get(i))/Simulator.getSpeed(Point.getDirection(path.get(i-1), path.get(i)), wind_direction);
+        }
+        return ret;
+    }
 
-                maxi = Math.max(maxi,heuristic);
-                if(maxi == heuristic){
-                    maxiIndex = i;
+    public ArrayList<Point> findBestPath(Point currentLoc, ArrayList<Point> points) {
+        
+        int ps = points.size();
+        double lowestDist = Double.MAX_VALUE;
+        double d;
+        ArrayList<Point> bestPathSoFar = null;
+        for (ArrayList<Point> path : listPermutations(points)) {
+            if (path.size() == ps) {
+                d = getPathDistance(currentLoc, path);
+                if (d < lowestDist) {
+                    lowestDist = d;
+                    bestPathSoFar = path;
                 }
             }
-
-        return targets.get(maxiIndex);
+        }
+        return bestPathSoFar;
     }
+
+    public ArrayList<Point> findBestPathByTime(Point currentLoc, ArrayList<Point> points) {
+        
+        int ps = points.size();
+        double lowestDist = Double.MAX_VALUE;
+        double d;
+        ArrayList<Point> bestPathSoFar = null;
+        for (ArrayList<Point> path : listPermutations(points)) {
+            if (path.size() == ps) {
+                d = getPathDistanceByTime(currentLoc, path);
+                //System.out.println(d);
+                if (d < lowestDist) {
+                    lowestDist = d;
+                    bestPathSoFar = path;
+                }
+            }
+        }
+        return bestPathSoFar;
+    }
+
     public ArrayList<Point> getkOptimalTargets(ArrayList<Integer> availableTargetIndices, Point currentLoc, int k) {
         ArrayList<Point> availableTargets = new ArrayList<Point>();
         for (int i : availableTargetIndices) {
@@ -368,9 +314,137 @@ public class SailingHelper {
         for (Point p : kClosest) {
             System.out.println(p.x + ", "+ p.y + " -- #" + targets.indexOf(p));
         }
-        return findBestPathByTime(currentLoc, kClosest)/*.get(0)*/;
+        return findBestPathByTime(currentLoc, kClosest);
     }
 
+        // foud on internet
+    public ArrayList<ArrayList<Point>> listPermutations(ArrayList<Point> list) {
 
+        if (list.size() == 0) {
+            ArrayList<ArrayList<Point>> result = new ArrayList<ArrayList<Point>>();
+            result.add(new ArrayList<Point>());
+            return result;
+        }
+        ArrayList<ArrayList<Point>> returnMe = new ArrayList<ArrayList<Point>>();
+        Point firstElement = list.remove(0);
+        ArrayList<ArrayList<Point>> recursiveReturn = listPermutations(list);
+        for (ArrayList<Point> li : recursiveReturn) {
+
+            for (int index = 0; index <= li.size(); index++) {
+                ArrayList<Point> temp = new ArrayList<Point>(li);
+                temp.add(index, firstElement);
+                returnMe.add(temp);
+            }
+        }
+        return returnMe;
+    }
+
+    public ArrayList<Point> getkOptimalTargets(ArrayList<Integer> availableTargetIndices, Point currentLoc, 
+        List<Point> groupLocations, Map<Integer, Set<Integer>> visited_set, int id, int k) {
+
+        double maxTargetValue = 0.0;
+        int numPlayers = groupLocations.size();
+        int maxiIndex = availableTargetIndices.get(0);
+        HashMap<Integer, Double> scores = new HashMap<Integer, Double>();
+        ArrayList<Integer> bestTargets = new ArrayList<Integer>();
+
+        for (int targetIndex : availableTargetIndices) {
+            Point target = targets.get(targetIndex);
+
+            double targetRealValue = numPlayers;
+            double targerProjectedValue = numPlayers;
+
+            for (int p = 0; p < numPlayers && visited_set != null; p++) {
+                if(p == id) continue;
+
+                Set<Integer> playerVisitedTargets = visited_set.get(p);
+
+                if(playerVisitedTargets.contains(targetIndex))   {
+                    targetRealValue--;
+                    targerProjectedValue--;
+                }
+                else {
+                    if (!playerWillReachTargetFirst(p, target, groupLocations, currentLoc)) {
+                        targerProjectedValue--;
+                    }
+                }
+            }
+
+            double timeToTarget = Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+            double heuristic = targetRealValue*targerProjectedValue/timeToTarget;
+            scores.put(targetIndex, heuristic);
+        }
+
+        double tmpMax, globalMax;
+        if(scores.size() > k)  {
+
+            for(int i=0; i<k; i++)  {                
+                globalMax = -1;
+                for(Integer key: scores.keySet()) {
+                    tmpMax = scores.get(key);
+                    
+                    if(tmpMax > globalMax)  {
+                        globalMax = tmpMax;
+                        maxiIndex = key;
+                    }
+                }    
+                bestTargets.add(maxiIndex);
+                scores.put(maxiIndex, -1.0);            
+            }
+        }   
+        else    {
+            for(Integer key: scores.keySet()) {
+                bestTargets.add(key);
+            }   
+        }
+
+        int idx = 0;
+        int counter = 0;
+        int nextTargetIndex = 0;
+        double accum = 0;
+        Point target = null;
+        Point nextTarget = null;
+        Point nextCurrentLoc = null;
+        ArrayList<Integer> tmpAvailableTargetIndices = null;
+        ArrayList<Double> accumulated = new ArrayList<Double>();
+        ArrayList<Point> targetSequence = new ArrayList<Point>();
+        HashMap<Integer, ArrayList<Point>> kTargetSequences = new HashMap<Integer, ArrayList<Point>>();
+
+        for(int targetIndex: bestTargets) {
+            
+            accum = 0;
+            counter = 0;
+            target = targets.get(targetIndex);
+            nextTargetIndex = targetIndex;
+
+            accumulated = new ArrayList<Double>();
+            targetSequence = new ArrayList<Point>();
+            tmpAvailableTargetIndices = new ArrayList<Integer>(availableTargetIndices);            
+            tmpAvailableTargetIndices.remove(new Integer(targetIndex));
+            accum += Point.getDistance(currentLoc, target)/Simulator.getSpeed(Point.getDirection(currentLoc, target), wind_direction);
+
+            while(counter < k-1)  {
+
+                targetSequence.add(target);            
+                nextCurrentLoc = target;
+                TargetStats targetStats = getHeuristicDistance(tmpAvailableTargetIndices, nextCurrentLoc, groupLocations, visited_set, id);
+                nextTargetIndex = targetStats.targetIndex;
+
+                target = targets.get(nextTargetIndex);
+                tmpAvailableTargetIndices.remove(new Integer(nextTargetIndex));
+                accum += targetStats.heuristic;
+                counter++;
+            }
+            targetSequence.add(target);
+            kTargetSequences.put(idx++, targetSequence);
+            accumulated.add(accum);
+        }
+
+
+        double maxAccum = Collections.max(accumulated);
+        ArrayList<Point> nextSequence = kTargetSequences.get(accumulated.indexOf(maxAccum));
+        
+        return nextSequence;
+    }
 
 }

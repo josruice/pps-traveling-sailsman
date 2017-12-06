@@ -22,11 +22,10 @@ public class Player extends sail.sim.Player {
     MST mst;
     double[][] graph;
     Tree tree;
-    ArrayList<Integer> path;
-    
+    ArrayList<Integer> path;    
 
     final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
-    String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy, mst
+    String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy, mst, clusteringMst, clusteringWeightedGreedy
 
     // Enable or disable different Weighted Greedy params, to compare results.
     final boolean WG_SCORE_ENABLED = true;
@@ -35,6 +34,9 @@ public class Player extends sail.sim.Player {
 
     // This one times out for t=100 and tl=1000, in the first few turns, so it is disabled automatically.
     final boolean WG_TARGETS_DISTANCES_ENABLED = true;
+    
+    ArrayList<ClusterInfo> clusters;
+    ClusterInfo currentCluster;
 
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
@@ -45,7 +47,8 @@ public class Player extends sail.sim.Player {
         this.windDirection = windDirection;
         
         if(this.numTargets >= 500){
-        	STRATEGY = "mst";
+//        	STRATEGY = "clusteringMst";
+        	STRATEGY = "clusteringWeightedGreedy";
         }
         
         switch (INITIAL_POINT) {
@@ -89,6 +92,7 @@ public class Player extends sail.sim.Player {
             initialLocation = new Point(0, 0);
     }
         // initialLocation = new Point(5.0, 5.0); // Use the middle point as initial location.
+        currentLocation = new Point(initialLocation.x, initialLocation.y);
         return initialLocation;
     }
 
@@ -116,7 +120,6 @@ public class Player extends sail.sim.Player {
             this.playerVisitsByTarget.put(targetId, playerVisits);
         }
         
-        
         if(STRATEGY == "mst"){
         	ArrayList<Point> targetsClone = new ArrayList<Point>();
         	for(Point target: targets){
@@ -124,13 +127,14 @@ public class Player extends sail.sim.Player {
         	}
         	targetsClone.add(initialLocation);
         	
-	        mst = new MST();
-	        graph = new double[numTargets + 1][numTargets + 1];
+        	graph = new double[numTargets + 1][numTargets + 1];
 	        for(int i = 0; i < numTargets + 1; i++){
 	        	for(int j = 0; j < numTargets + 1; j++){
 	        		graph[i][j] = computeEstimatedTimeToTarget(targetsClone.get(i), targetsClone.get(j));
 	        	}
 	        }
+	        
+	        mst = new MST();	        	        
 	        int[] parents = mst.primMST(graph);
 	        buildTree(parents);
 	        path = new ArrayList<Integer>();
@@ -138,6 +142,70 @@ public class Player extends sail.sim.Player {
 	        
 	        path.remove(0);
         }
+        
+        else if(STRATEGY == "clusteringMst"){
+        	graph = new double[numTargets][numTargets];
+	        for(int i = 0; i < numTargets; i++){
+	        	for(int j = 0; j < numTargets; j++){
+	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
+	        	}
+	        }
+	        cluster(10,3);
+	        currentCluster = findNextUnvisitedCluster(groupLocations);
+	        computePathInCluster();
+	        
+//	        path.remove(0);
+        }
+        
+        else if(STRATEGY == "clusteringWeightedGreedy"){
+        	graph = new double[numTargets][numTargets];
+	        for(int i = 0; i < numTargets; i++){
+	        	for(int j = 0; j < numTargets; j++){
+	        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(i), targets.get(j));
+	        	}
+	        }
+	        cluster(5,1);
+	        currentCluster = findNextUnvisitedCluster(groupLocations);
+	        path = currentCluster.clusterPoints;
+        }
+    }
+    
+    public void computePathInCluster(){
+//    	System.out.println("Inside compute path in cluster");
+    	
+    	ArrayList<Integer> clusterPoints = currentCluster.clusterPoints;
+        int numPoints = clusterPoints.size();
+        
+        graph = new double[numPoints][numPoints];
+        for(int i = 0; i < numPoints; i++){
+        	for(int j = 0; j < numPoints; j++){
+        		int index1 = clusterPoints.get(i);
+        		int index2 = clusterPoints.get(j);
+        		graph[i][j] = computeEstimatedTimeToTarget(targets.get(index1), targets.get(index2));
+        	}
+        }
+        
+        mst = new MST();	        	        
+        int[] parents = mst.primMST(graph);
+        buildTree(parents);
+        path = new ArrayList<Integer>();
+        tree.preorder(path);
+        
+        for(int i = 0; i < path.size(); i++){
+        	int clusterPointIndex = path.get(i);
+        	int targetIndex = clusterPoints.get(clusterPointIndex);
+        	path.set(i, targetIndex);
+        }
+    }
+    
+    public void cluster(int minNumElements, double maxDistance){
+    	clusters = new ArrayList<ClusterInfo>();
+    	DBSCANClusterer clusterer = new DBSCANClusterer<Point>(targets,minNumElements,maxDistance, graph);
+    	ArrayList<ArrayList<Integer>> clustersList = clusterer.performClustering();
+    	
+    	for(ArrayList<Integer> clusterPoints: clustersList){
+    		clusters.add(new ClusterInfo(clusterPoints));
+    	}
     }
 
     @Override
@@ -150,43 +218,149 @@ public class Player extends sail.sim.Player {
                 return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
             case "mst":
             	return mstMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "clusteringMst":
+            	return clusteringMstMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "clusteringWeightedGreedy":
+            	return clusteringWeightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
             default:
                 System.err.println("Invalid strategy "+STRATEGY+" chosen");
                 return new Point(0,0);
         }
     }
     
-    public void buildTree(int[] parents){    	
-    	tree = new Tree();
-    	int rootIndex = findRootIndexOfMST(parents);
-    	tree.root = new Node(rootIndex);
-    	tree.root.children = findChildren(rootIndex, parents);    	
-    }
-    
-    public int findRootIndexOfMST(int[] parents){
-    	for(int i = 0; i < numTargets; i++){
-    		if(parents[i] == -1){
-    			return i;
-    		}
-    	}
-    	return -1;
-    }
-    
-    public ArrayList<Node> findChildren(int rootIndex, int[] parents){
-    	ArrayList<Node> children = null;
+    public Point clusteringWeightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){    	
+    	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
+    		path.remove(0);
     	
-    	for(int i = 0; i < parents.length; i++){
-    		if(parents[i] == rootIndex){
-    			Node child = new Node(i);
-    			child.children = findChildren(i, parents);
+    	if(path.size() == 0){
+    		if(clusters.size() == 0){
+    			Point direction = Point.getDirection(currentLocation,initialLocation);
+    			Point unitDirection = Point.getUnitVector(direction);
+    			return unitDirection;   
+    		}
+    		else{
+    			currentCluster = findNextUnvisitedCluster(groupLocations);
+    			path = currentCluster.clusterPoints;
     			
-    			if(children == null)
-    				children = new ArrayList<Node>();
-    			children.add(child);
+    			Point direction = Point.getDirection(currentLocation,currentCluster.closestClusterPoint);
+    			Point unitDirection = Point.getUnitVector(direction);
+    			return unitDirection;
     		}
     	}
     	
-    	return children;
+    	double maxWeight = Double.NEGATIVE_INFINITY;
+        Point maxWeightTarget = this.initialLocation;  // If no unvisited targets, initial location will be our next target.
+        for (int targetId : path) {
+        	if(!ourUnvisitedTargets.contains(targetId)){
+        		path.remove(Integer.valueOf(targetId));
+        		continue;
+        	}
+            double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
+            int score = computeRemainingScore(targetId);
+            double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+
+            double weight = (score * othersTime) / ourTime;
+            if (weight > maxWeight) {
+                maxWeight = weight;
+                maxWeightTarget = targets.get(targetId);
+            }
+        }
+        
+        
+        return computeNextDirection(maxWeightTarget, timeStep);
+    }
+    
+    public Point clusteringMstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+//    	ArrayList<Integer> clusterPoints = currentCluster.clusterPoints;
+    	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
+    		path.remove(0);
+    	
+    	if(path.size() == 0){
+    		if(clusters.size() == 0){
+    			Point direction = Point.getDirection(currentLocation,initialLocation);
+    			Point unitDirection = Point.getUnitVector(direction);
+    			return unitDirection;   
+    		}
+    		else{
+    			currentCluster = findNextUnvisitedCluster(groupLocations);
+    			
+    			computePathInCluster();
+    			
+    			Point direction = Point.getDirection(currentLocation,currentCluster.closestClusterPoint);
+    			Point unitDirection = Point.getUnitVector(direction);
+    			return unitDirection;
+    		}
+    	}
+    	
+    	int targetIndex = path.get(0);
+    	Point target = targets.get(targetIndex);
+    	Point nextTarget = initialLocation;
+    	if(path.size() >= 2){
+        	int nextTargetIndex = path.get(1);
+        	nextTarget = targets.get(nextTargetIndex);
+    	}
+//    	
+    	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
+    	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
+    	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
+    	
+    	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
+//    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
+    	Point unitDirection = Point.getUnitVector(direction);
+    	return unitDirection;
+    	
+//    	return computeNextDirection(pointWithin10MetersDirection,timeStep);
+    }
+    
+    public ClusterInfo findNextUnvisitedCluster(List<Point> groupLocations){
+    	ClusterInfo closestCluster = currentCluster;
+    	double maxHeuristic = 0;
+    	for(ClusterInfo clustering: clusters){
+    		clustering = computeClosestClusterPoint(clustering);
+    		clustering.clusterHeuristic = computeClusterHeuristic(clustering, groupLocations);
+    		
+    		if(clustering.clusterHeuristic > maxHeuristic){
+    			closestCluster = clustering;
+    			maxHeuristic = clustering.clusterHeuristic;
+    		}
+    	}
+    	
+    	clusters.remove(closestCluster);
+    	return closestCluster;
+    }
+    
+  //TODO: Decide how to handle graph which contains the initial location for the last index
+  //TODO: Create heuristic to decide which cluster to go to, based on 1. Distance, 2. Number of targets, 3. Number of players, 4. Actual location of cluster (Not sure)
+  //TODO: After deciding cluster, go to nearest point of cluster
+  //TODO: After reaching nearest point of cluster, run mst
+    public double computeClusterHeuristic(ClusterInfo clustering, List<Point> groupLocations){
+    	double time = clustering.timeToCluster;
+    	int numPoints = clustering.clusterPoints.size();
+    	
+    	System.out.println("time: " + time);
+    	System.out.println("Num Points: " + numPoints);
+    	
+    	double heuristic = 5/time + numPoints;
+    	return heuristic;
+    }
+    
+    public ClusterInfo computeClosestClusterPoint(ClusterInfo clustering){
+    	ArrayList<Integer> clusterPoints = clustering.clusterPoints;
+    	
+    	Point closestClusterPoint = targets.get(clusterPoints.get(0));
+        double minTime = Double.MAX_VALUE;
+        for (int clusterPoint : clusterPoints) {
+            double time = computeEstimatedTimeToTarget(targets.get(clusterPoint));
+            if (time < minTime) {
+                minTime = time;
+                closestClusterPoint = targets.get(clusterPoint);
+            }
+        }
+        
+        clustering.closestClusterPoint = closestClusterPoint;
+        clustering.timeToCluster = minTime;
+        
+        return clustering;
     }
     
     public Point mstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
@@ -254,31 +428,6 @@ public class Player extends sail.sim.Player {
         }
 
         return computeNextDirection(nextTarget, timeStep);
-    }
-    
-    public Point mstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-    	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
-    		path.remove(0);
-    	
-    	if(path.size() == 0){
-    		Point direction = Point.getDirection(currentLocation,initialLocation);
-    		Point unitDirection = Point.getUnitVector(direction);
-        	return unitDirection;    		
-    	}
-    	
-    	int targetIndex = path.get(0);
-    	Point target = targets.get(targetIndex);
-    	Point nextTarget = initialLocation;
-    	if(path.size() >= 2){
-        	int nextTargetIndex = path.get(1);
-        	nextTarget = targets.get(nextTargetIndex);
-    	}
-    	
-    	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
-    	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
-    	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
-    	
-    	return computeNextDirection(pointWithin10MetersDirection,timeStep);
     }
     
     public void buildTree(int[] parents){    	

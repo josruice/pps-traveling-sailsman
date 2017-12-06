@@ -40,12 +40,12 @@ public class Player extends sail.sim.Player {
 
 
         Point unit = Point.getUnitVector(wind_direction);
-        initial = new Point(6, 5- unit.x / unit.y);
+        initial = new Point(6, 5 - (unit.x / unit.y));
         if(initial.y > 10 || initial.y < 0 || initial.x > 10 || initial.x < 0){
             //System.out.println("will be at the center");
-            //initial = new Point(4.5 + gen.nextDouble(), 4.5 + gen.nextDouble());
-            initial = new Point(4, 5+ unit.x / unit.y);
+            initial = new Point(4, 5 + (unit.x/unit.y));
         }
+
         if(initial.y > 10 || initial.y < 0 || initial.x > 10 || initial.x < 0){
             //System.out.println("will be at the center");
             initial = new Point(4.5 + gen.nextDouble(), 4.5 + gen.nextDouble());
@@ -257,32 +257,30 @@ public class Player extends sail.sim.Player {
 
                     //switching to nearest neighbor after .8 of our own traversal
                     if(visited_set.get(id).size() >= 0.8*this.targets.size()) {
-                      //System.out.println("WE JUST CHANGED STRATEGY");
+                      System.out.println("WE JUST CHANGED STRATEGY");
                       second_stage = true;
                     }
 
                     //System.out.println("second stage is: " + second_stage);
 
-                    for(int j = 0; j < num_players; j++){
-                        if(j != id && !visited_set.get(j).contains(i)){
-                            double currDist = Point.getDistance(group_locations.get(j), this.targets.get(i));
-                            double currSpeed = Simulator.getSpeed(Point.getDirection(group_locations.get(j), targets.get(i)), wind_direction);
-                            double currTime = (currDist)/currSpeed ;
-
-                            double prevDist = Point.getDistance(this.memory.get(j), this.targets.get(i));
-                            double prevSpeed = Simulator.getSpeed(Point.getDirection(this.memory.get(j), targets.get(i)), wind_direction);
-                            double prevTime = (prevDist)/prevSpeed ;
-
-                            // double time1 = this.target_dist_map.get(i).get(j);
-                            if(currTime < time && currTime<prevTime ) count1+=1;
-
-                            //if(currTime < time) count1+=1;
-
-                            // make use of memory to give us a better sense of where to go
-                            // Point figureDirection = Point.getDirection(memory.get(j), group_locations.get(j));
-                        }
-
-                    }
+                    // for(int j = 0; j < num_players; j++){
+                    //     if(j != id && !visited_set.get(j).contains(i)){
+                    //         double currDist = Point.getDistance(group_locations.get(j), this.targets.get(i));
+                    //         double currSpeed = Simulator.getSpeed(Point.getDirection(group_locations.get(j), targets.get(i)), wind_direction);
+                    //         double currTime = (currDist)/currSpeed ;
+                    //
+                    //         double prevDist = Point.getDistance(this.memory.get(j), this.targets.get(i));
+                    //         double prevSpeed = Simulator.getSpeed(Point.getDirection(this.memory.get(j), targets.get(i)), wind_direction);
+                    //         double prevTime = (prevDist)/prevSpeed ;
+                    //
+                    //         // double time1 = this.target_dist_map.get(i).get(j);
+                    //         if(currTime < time && currTime<prevTime) count1+=1;
+                    //
+                    //         // make use of memory to give us a better sense of where to go
+                    //         // Point figureDirection = Point.getDirection(memory.get(j), group_locations.get(j));
+                    //     }
+                    //
+                    // }
                     // int count2 = 0;
                     //     List<Double> neighbor_time = this.target_dist_map.get(this.curr_target_ind);
                     //     for(int p = 0; p < neighbor_time.size(); p++){
@@ -293,44 +291,99 @@ public class Player extends sail.sim.Player {
                     //         }
                     //     }
                     //think about the next target
-                    List<Integer> tmp_t = new ArrayList<Integer>();
-                    int current_id = i;
-                    double next_step_time = 0;
-                    int next_step_score = 0;
-                    while(tmp_t.size() < 3){
-                      List<Double> next_time = this.target_dist_map.get(current_id);
-                      int next_ind = -1;
-                      double next_t = -1;
-
-                      for(int p = 0; p < next_time.size(); p++){
-                          if(!visited_set.get(id).contains(p) && p!=i){
-                              if(((num_players-this.targets_visited.get(p))/next_time.get(p) < next_t && !tmp_t.contains(p)) || next_t == -1){
-                                  next_t = (num_players-this.targets_visited.get(p))/next_time.get(p);
-                                  next_ind = p;
-                              }
-                          }
-                      }
-                      if(next_ind != -1){
-                        next_step_time += next_time.get(next_ind);
-                        next_step_score += (num_players-this.targets_visited.get(next_ind));
-                      }
-                      tmp_t.add(next_ind);
-                      current_id = next_ind;
-                    }
-
+                    // List<Double> next_time = this.target_dist_map.get(i);
+                    // int next_ind = -1;
+                    // double next_t = -1;
+                    //
+                    //
+                    // for(int p = 0; p < next_time.size(); p++){
+                    //     if(!visited_set.get(id).contains(p) && p!=i){
+                    //         if(((num_players-this.targets_visited.get(p))/next_time.get(p) < next_t && p != i) || next_t == -1){
+                    //             next_t = (num_players-this.targets_visited.get(p))/next_time.get(p);
+                    //             next_ind = p;
+                    //         }
+                    //     }
+                    // }
                     //maximizing measure
                     //took out .7 weight for count1 because we took into account prev time to current time
                     //took out count2 - waiting for Ananth's implementation
-                    double measure = ((num_players-this.targets_visited.get(i)) - count1)/time;
-                    double measure1 = next_step_score/next_step_time;
-                    // if( measure + 0.3*next_t > tempTime || tempTime == -1){
-                    //     tempTime = measure;
-                    //     result = i;
-                    // }
-                    if( measure + 0.4*measure1 > tempTime || tempTime == -1){
+                    if(this.targets.size() <= 5) {
+                      double measure = (num_players-this.targets_visited.get(i))/time;
+                      if(measure >= tempTime || tempTime == -1) {
                         tempTime = measure;
                         result = i;
+                      }
+                    } else {
+                      for(int j = 0; j < num_players; j++){
+                          if(j != id && !visited_set.get(j).contains(i)){
+                              double currDist = Point.getDistance(group_locations.get(j), this.targets.get(i));
+                              double currSpeed = Simulator.getSpeed(Point.getDirection(group_locations.get(j), targets.get(i)), wind_direction);
+                              double currTime = (currDist)/currSpeed ;
+
+                              double prevDist = Point.getDistance(this.memory.get(j), this.targets.get(i));
+                              double prevSpeed = Simulator.getSpeed(Point.getDirection(this.memory.get(j), targets.get(i)), wind_direction);
+                              double prevTime = (prevDist)/prevSpeed ;
+
+                              // double time1 = this.target_dist_map.get(i).get(j);
+                              if(currTime < time && currTime<prevTime) count1+=1;
+
+                              // make use of memory to give us a better sense of where to go
+                              // Point figureDirection = Point.getDirection(memory.get(j), group_locations.get(j));
+                          }
+
+                      }
+
+                      //think ahead by a few steps
+                      List<Integer> tmp_t = new ArrayList<Integer>();
+                      int current_id = i;
+                      double next_step_time = 0;
+                      int next_step_score = 0;
+                      while(tmp_t.size() < 1){
+                        List<Double> next_time = this.target_dist_map.get(current_id);
+                        int next_ind = -1;
+                        double next_t = -1;
+
+                        for(int p = 0; p < next_time.size(); p++){
+                            if(!visited_set.get(id).contains(p) && p!=i){
+                                if(((num_players-this.targets_visited.get(p))/next_time.get(p) < next_t && !tmp_t.contains(p)) || next_t == -1){
+                                    next_t = (num_players-this.targets_visited.get(p))/next_time.get(p);
+                                    next_ind = p;
+                                }
+                            }
+                        }
+                        if(next_ind != -1){
+                          next_step_time += next_time.get(next_ind);
+                          next_step_score += (num_players-this.targets_visited.get(next_ind));
+                        }
+                        tmp_t.add(next_ind);
+                        current_id = next_ind;
+                      }
+
+                      // List<Double> next_time = this.target_dist_map.get(i);
+                      // int next_ind = -1;
+                      // double next_t = -1;
+                      //
+                      //
+                      // for(int p = 0; p < next_time.size(); p++){
+                      //     if(!visited_set.get(id).contains(p) && p!=i){
+                      //         if(((num_players-this.targets_visited.get(p))/next_time.get(p) < next_t && p != i) || next_t == -1){
+                      //             next_t = (num_players-this.targets_visited.get(p))/next_time.get(p);
+                      //             next_ind = p;
+                      //         }
+                      //     }
+                      // }
+
+                      double measure = ((num_players-this.targets_visited.get(i)) - count1)/time;
+                      double measure1 = next_step_score/next_step_time;
+                      if( measure + 0.2*measure1 > tempTime || tempTime == -1){
+                          tempTime = measure + 0.2*measure1;
+                          result = i;
+                      }
+
+
+
                     }
+
 
             } else {
               double minTime = -1;
@@ -346,10 +399,12 @@ public class Player extends sail.sim.Player {
                     result = i;
                     minTime = currTime;
                   }
+                  // this.curr_target_ind = result;
+                  // return new Point(this.targets.get(result).x, this.targets.get(result).y);
                 }
               }
 
-            }//else
+            }
           }
         }
         this.curr_target_ind = result;
