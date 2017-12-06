@@ -47,8 +47,7 @@ public class Player extends sail.sim.Player {
         this.windDirection = windDirection;
         
         if(this.numTargets >= 500){
-//        	STRATEGY = "clusteringMst";
-        	STRATEGY = "clusteringWeightedGreedy";
+        	STRATEGY = "greedy";
         }
         
         switch (INITIAL_POINT) {
@@ -153,9 +152,7 @@ public class Player extends sail.sim.Player {
 	        cluster(10,2);
 	        currentCluster = findNextUnvisitedCluster(groupLocations);
 	        computePathInCluster();
-	        
-//	        path.remove(0);
-        }
+	    }
         
         else if(STRATEGY == "clusteringWeightedGreedy"){
         	graph = new double[numTargets][numTargets];
@@ -170,9 +167,7 @@ public class Player extends sail.sim.Player {
         }
     }
     
-    public void computePathInCluster(){
-//    	System.out.println("Inside compute path in cluster");
-    	
+    public void computePathInCluster(){    	
     	ArrayList<Integer> clusterPoints = currentCluster.clusterPoints;
         int numPoints = clusterPoints.size();
         
@@ -281,7 +276,6 @@ public class Player extends sail.sim.Player {
     }
     
     public Point clusteringMstMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-//    	ArrayList<Integer> clusterPoints = currentCluster.clusterPoints;
     	while(path.size() > 0 && !ourUnvisitedTargets.contains(path.get(0)))
     		path.remove(0);
     	
@@ -309,17 +303,14 @@ public class Player extends sail.sim.Player {
         	int nextTargetIndex = path.get(1);
         	nextTarget = targets.get(nextTargetIndex);
     	}
-//    	
+  	
     	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
     	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
     	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
     	
     	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
-//    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
     	Point unitDirection = Point.getUnitVector(direction);
     	return unitDirection;
-    	
-//    	return computeNextDirection(pointWithin10MetersDirection,timeStep);
     }
     
     public ClusterInfo findNextUnvisitedCluster(List<Point> groupLocations){
@@ -339,31 +330,21 @@ public class Player extends sail.sim.Player {
     	return closestCluster;
     }
     
-  //TODO: Decide how to handle graph which contains the initial location for the last index
-  //TODO: Create heuristic to decide which cluster to go to, based on 1. Distance, 2. Number of targets, 3. Number of players, 4. Actual location of cluster (Not sure)
-  //TODO: After deciding cluster, go to nearest point of cluster
-  //TODO: After reaching nearest point of cluster, run mst
     public double computeClusterHeuristic(ClusterInfo clustering, List<Point> groupLocations){
     	double time = clustering.timeToCluster;
     	ArrayList<Integer> clusterPoints = clustering.clusterPoints;
     	Point mean = clustering.clusterMean;
-//    	int numPoints = clustering.clusterPoints.size();
     	double distanceFromMid = Point.getDistance(mean, new Point(5,5));
     	double heuristic = 0;
     	
     	for(int targetId: clusterPoints){
-//	    	double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
 	        int score = computeRemainingScore(targetId);
 	        double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
 	
 	        heuristic += score * othersTime;
     	}
-    	
-//    	System.out.println("time: " + time);
-//    	System.out.println("Num Points: " + numPoints);
-    	
+    	    	
     	heuristic = heuristic + 15*time + 50/distanceFromMid;
-//    	double heuristic = 5/time + numPoints;
     	return heuristic;
     }
     
@@ -407,12 +388,7 @@ public class Player extends sail.sim.Player {
     	Point directionBetweenTargets = Point.getDirection(target,nextTarget);
     	Point unitDirectionBetweenTargets = Point.getUnitVector(directionBetweenTargets);
     	Point pointWithin10MetersDirection = Point.sum(target,Point.multiply(unitDirectionBetweenTargets,0.01));
-    	
-//    	Point direction = Point.getDirection(currentLocation,pointWithin10MetersDirection);
-//    	Point direction = Point.getDirection(currentLocation,targets.get(targetIndex));
-//    	Point unitDirection = Point.getUnitVector(direction);
-//    	return unitDirection;
-    	
+    	    	
     	return computeNextDirection(pointWithin10MetersDirection,timeStep);
     }
 
