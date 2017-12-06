@@ -12,6 +12,9 @@ public class Player extends sail.sim.Player {
     List<Point> targets;
     Map<Integer, Set<Integer>> visited_set;
     int[] targetScore;
+    double[] estimatedTargetScores;
+
+
     Random gen;
     int id;
     Point wind_direction;
@@ -19,11 +22,13 @@ public class Player extends sail.sim.Player {
     Point initial;
 
     int curIndex;
-    int[] nextTargetIndexes;
+    List<Integer> nextTargetIndexes;
     int nextTargetIndex;
     int skip;
 
     int turn_num;
+
+    List<Point> groupLocations;
 
     double BESTANGLE = 0.511337; 
     double BESTANGLE_UPWIND = 0.68867265359;
@@ -39,6 +44,8 @@ public class Player extends sail.sim.Player {
 
     HashMap<Integer, Point[]> playerMoves = new HashMap<Integer, Point[]>();
     int curSeqenceLength;
+
+    Map<Integer, List<Integer>> bestPathFromTarget;
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
@@ -68,17 +75,22 @@ public class Player extends sail.sim.Player {
         this.id = id;
         this.nextTargetIndex = -1;
         if(t <= 20) {
-            this.K = Math.min(2, t);
+            this.K = Math.min(1, t);
         } else if(t <= 50) {
-            this.K = Math.min(3, t);
+            this.K = Math.min(1, t);
         } else {
-            this.K = Math.min(5, t);
+            this.K = Math.min(1, t);
         }
+
+        this.groupLocations = group_locations;
+
         targetScore = new int[targets.size()];
+        estimatedTargetScores = new double[targets.size()];
         for(int i = 0; i < targetScore.length; i++) {
             targetScore[i] = group_locations.size();
         }
 
+        this.bestPathFromTarget = new HashMap<>();
         curIndex = -1;
         skip = -1;
         this.currentLocation = group_locations.get(id);
@@ -94,7 +106,7 @@ public class Player extends sail.sim.Player {
         }*/
     }
 
-    private void initializeBestSpeedVector(){
+    private void initializeBestSpeedVector() {
         double windAngle = Math.atan2(this.wind_direction.y, this.wind_direction.x);
         
         double speed = getSpeedRelativeToWind(BESTANGLE);
@@ -115,18 +127,19 @@ public class Player extends sail.sim.Player {
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
         this.currentLocation = group_locations.get(id);
+        this.groupLocations = group_locations;
         for (int i=0; i<group_locations.size(); i++){
             playerMoves.put(i, new Point[] {playerMoves.get(i)[1], group_locations.get(i)});
             if (i == id) continue;
             
             ArrayList<Point> predictList = predictNextTarget(i, playerMoves.get(i)[0], playerMoves.get(i)[1]);
-            if (nextTargetIndexes != null && curIndex != -1 && curIndex < curSeqenceLength) {
-                if (nextTargetIndexes[curIndex] == targets.size()) break;
-                Point next = targets.get(nextTargetIndexes[curIndex]);
+            if (nextTargetIndexes != null && curIndex != -1 && curIndex < nextTargetIndexes.size()) {
+                if (nextTargetIndexes.get(curIndex) == targets.size()) break;
+                Point next = targets.get(nextTargetIndexes.get(curIndex));
                 double oppTime = getTimeToTravel(next, group_locations.get(i));
                 double ourTime = getTimeToTravel(next, group_locations.get(id)); 
                 if (predictList.contains(next) && oppTime < ourTime) {
-                    skip = nextTargetIndexes[curIndex];
+                    skip = nextTargetIndexes.get(curIndex);
                 } else if (predictList.contains(next) && oppTime >= ourTime) {
                     skip = -1;
                 }
@@ -185,21 +198,26 @@ public class Player extends sail.sim.Player {
     public Point nearestNeighborMove(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
         turn_num++;
         boolean justHitATarget = false;
-        while(curIndex < curSeqenceLength && visited_set != null && nextTargetIndexes != null && visited_set.get(id).contains(nextTargetIndexes[curIndex])) {
+        while(curIndex < curSeqenceLength && visited_set != null && nextTargetIndexes != null && nextTargetIndexes.size()>0 && visited_set.get(id).contains(nextTargetIndexes.get(curIndex))) {
             curIndex++;
             justHitATarget = true;
         }
 
-        if(nextTargetIndexes == null || curIndex == curSeqenceLength || curIndex == -1) {
+        if(nextTargetIndexes == null || curIndex == curSeqenceLength || curIndex == -1 || nextTargetIndexes.size()==0) {
+            //System.out.println("Updating");
+            for(int i = 0; i < targetScore.length; i++) {
+                estimatedTargetScores[i] = targetScore[i];
+                adjustScore(i);
+            }
             nextTargetIndexes = selectKBest(group_locations.get(id));
             curIndex = 0;
             justHitATarget = true;
         }
 
-        if(nextTargetIndexes[curIndex] == targets.size()) {
+        if(nextTargetIndexes.get(curIndex) == targets.size()) {
             return moveHelper(group_locations, initial, dt, justHitATarget);
         } else {
-            return moveHelper(group_locations, targets.get(nextTargetIndexes[curIndex]), dt, justHitATarget);
+            return moveHelper(group_locations, targets.get(nextTargetIndexes.get(curIndex)), dt, justHitATarget);
         }
     }
 
@@ -338,13 +356,13 @@ public class Player extends sail.sim.Player {
         return nextLocation;
     }
 
-    public int[] selectKBest(Point curLoc) {
+    public List<Integer> selectKBest(Point curLoc) {
         double maxScore = -1;
-        int[] bestSeq = new int[K];
+        List<Integer> bestSeq = new ArrayList<>();
         for(int i = 1; i <= K; i++) {
-            int[] seq = selectKBest(curLoc, i);
+            List<Integer> seq = selectKBest(curLoc, i);
             double score = getTargetsScore(curLoc, seq);
-            System.out.println(i + ": " + score);
+            //System.out.println(i + ": " + score);
             if(score > maxScore) {
                 bestSeq = seq;
                 curSeqenceLength = i;
@@ -356,19 +374,16 @@ public class Player extends sail.sim.Player {
         return bestSeq;
     }
 
-    public int[] selectKBest(Point curLoc, int L) {
+    public List<Integer> selectKBest(Point curLoc, int L) {
         double maxScore = -1;
         int targetIndex = -1;
-        int[] p = new int[L];
-        int[] maxP = new int[L];
-        int nearestTarget = findNearestNeighbor(curLoc);
-        if(visited_set != null && visited_set.get(this.id).size() > targets.size() - L) {
-            maxP[0] = nearestTarget;
+        List<Integer> p = new ArrayList<Integer>();
+        List<Integer> maxP = new ArrayList<Integer>();
+        if(visited_set != null && visited_set.get(this.id).size() > targets.size() - K) {
+            maxP.add(findNearestNeighbor(curLoc));
             return maxP;
         }
 
-        //maxScore = getTargetScore(curLoc, nearestTarget);
-        //targetIndex = nearestTarget;
         for(int i = 0; i < targets.size(); i++) {
             if(visited_set != null && visited_set.get(this.id).contains(i) || i == skip) continue;
 
@@ -391,20 +406,36 @@ public class Player extends sail.sim.Player {
         return maxP;
     }
 
-
-    public int[] findNearestNeighbors(int targetIndex, int L) {
-        int[] nextPoints = new int[L];
-        nextPoints[0] = targetIndex;
-        Set<Integer> excluded = new HashSet<Integer>();
-        excluded.add(nextPoints[0]);
-        for(int i = 1; i < nextPoints.length; i++) {
-            nextPoints[i] = findNearestTarget(nextPoints[i-1], excluded);
-            excluded.add(nextPoints[i]);
+    public List<Integer> findNearestNeighbors(int targetIndex, int L) {
+        boolean cached = true;
+        if(bestPathFromTarget.containsKey(targetIndex)) {
+            for(int r : bestPathFromTarget.get(targetIndex)) {
+                if(visited_set != null && visited_set.get(this.id).contains(r)) {
+                    cached = false;
+                }
+            }
+        } else {
+            cached = false;
         }
 
-        return nextPoints;
-    }
 
+        if(!cached) {
+            List<Integer> nextPoints = new ArrayList<>();
+            nextPoints.add(targetIndex);
+            Set<Integer> excluded = new HashSet<Integer>();
+            excluded.add(targetIndex);
+            for(int i = 1; i < K; i++) {
+                int nxt = findNearestTarget(nextPoints.get(i-1), excluded);
+                nextPoints.add(nxt);
+                excluded.add(nxt);
+            }
+
+            bestPathFromTarget.put(targetIndex, nextPoints);
+        }
+
+        return bestPathFromTarget.get(targetIndex).subList(0, L);
+
+    }
 
      private int findNearestTarget(int targetIndex, Set<Integer> excluded) {
         int nearestTargetIndex = -1;
@@ -465,16 +496,17 @@ public class Player extends sail.sim.Player {
         double travelTime = getTimeToTravel(from, targets.get(targetIndex));
         //System.out.println("time: " + travelTime);
         //System.out.println("score: " + targetScore[targetIndex]);
-        return targetScore[targetIndex]/Math.pow(travelTime, 1);
+        return estimatedTargetScores[targetIndex]/Math.pow(travelTime, 1);
     }
 
-    private double getTargetsScore(Point from, int[] targetIndexes) {
-        if(targetIndexes[0] == t) return 0;
-        double travelTime = getTimeToTravel(from, targets.get(targetIndexes[0]));
-        double score = targetScore[targetIndexes[0]];
-        for(int i = 1; i < targetIndexes.length; i++) {
-            travelTime += getTimeToTravel(targets.get(targetIndexes[i-1]), targets.get(targetIndexes[i]));
-            score += targetIndexes[i] == t ? 0 : targetScore[targetIndexes[i]];
+    private double getTargetsScore(Point from, List<Integer> targetIndexes) {
+        if(targetIndexes.size()==0 || targetIndexes.get(0) == t) return 0;
+        double travelTime = getTimeToTravel(from, targets.get(targetIndexes.get(0)));
+        double score = targetScore[targetIndexes.get(0)];
+
+        for(int i = 1; i < targetIndexes.size(); i++) {
+            travelTime += getTimeToTravel(targets.get(targetIndexes.get(i-1)), targets.get(targetIndexes.get(i)));
+            score += targetIndexes.get(i) == t ? 0 : estimatedTargetScores[i];
         }
 
         //System.out.println("time: " + travelTime);
@@ -487,6 +519,7 @@ public class Player extends sail.sim.Player {
     */
     @Override
     public void onMoveFinished(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set) {
+        this.groupLocations = group_locations;
         this.visited_set = visited_set;
         for(int i = 0; i < targetScore.length; i++) {
             targetScore[i] = group_locations.size();
@@ -498,6 +531,33 @@ public class Player extends sail.sim.Player {
                 targetScore[l]--;
             }
         }
+    }
+
+    private void adjustScore(int targetIndex) {
+        for(int pid = 0; pid < groupLocations.size(); pid++) {
+            double ourTime = getTimeToTravel(groupLocations.get(this.id), targets.get(targetIndex));
+            double oppTime = getTimeToTravel(groupLocations.get(pid), targets.get(targetIndex));
+            if(oppTime < ourTime) {
+                if(this.visited_set == null || !this.visited_set.get(pid).contains(targetIndex)) {
+                    estimatedTargetScores[targetIndex] -= (ourTime - oppTime)/ourTime;
+                }
+            }
+        }
+    }
+
+    private double computeUnvisitedPlayersTimeTo(int targetIndex) {
+        double time = 1.0;
+        Point target = this.targets.get(targetIndex);
+        for (int pid = 0; pid < this.groupLocations.size(); pid++) {
+            if (pid == this.id) continue; // Skip our own.
+            if (!this.visited_set.get(pid).contains(targetIndex)) {
+                // This means that this player hasn't visited this target yet, so
+                // compute her time to target.
+                Point playerLoc = groupLocations.get(pid);
+                time += getTimeToTravel(playerLoc, target);
+            }
+        }
+        return time == 0 ? 1 : time;
     }
 
     private void printPoint(Point a){

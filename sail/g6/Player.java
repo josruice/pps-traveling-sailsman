@@ -20,7 +20,6 @@ public class Player extends sail.sim.Player {
     int roundNumber = 0;
     int cornerThreshold = 100;// if there are more points then this then we'll start in a corner.
     int centerThreshold = 5; // If there are less than these many points, then we start closer to the center.
-    int tThreshold = 500;
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
@@ -80,11 +79,17 @@ public class Player extends sail.sim.Player {
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
+        //System.out.println("Time remaining: " + time_remaining_ms);
         if (visited_set != null && visited_set.get(id).size() == targets.size()) {
             // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findAngle(group_locations.get(id), initial, dt);
-        } else if ((targets.size() >= tThreshold || dt < 0.01) && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
+        } else if (dt < 0.01 && targets.size() == 25 && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
+            // Hard-coded for 25 targets and 0.004 time step. We take the best path 4/5 times and direct line 1.5 times.
+            if (nextTarget % 5 == 0) {
+                return moveInPath(group_locations.get(id), targets.get(nextTarget));
+            }
+
             return findAngle(group_locations.get(id), targets.get(nextTarget), dt);
         }
         else {
