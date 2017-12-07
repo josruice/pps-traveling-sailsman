@@ -97,7 +97,7 @@ for num_targets, time_step, time_limit, repetition in env_vars:
         final_scores = scores['final_scores']
         time_remaining = scores['time_remaining']
 
-        print("%d,%d,%d,%d,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % (
+        print("%d,%d,%d,%.2f,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % (
             repetition,
             primal_seed,
             num_targets,

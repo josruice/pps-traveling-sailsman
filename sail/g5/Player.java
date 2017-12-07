@@ -22,10 +22,13 @@ public class Player extends sail.sim.Player {
     MST mst;
     double[][] graph;
     Tree tree;
-    ArrayList<Integer> path;    
+    ArrayList<Integer> path;
 
-    final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
-    String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy, mst, clusteringMst, clusteringWeightedGreedy
+    // One of: random, middle, windMiddleToEdges, randomAroundWindMiddleToEdges
+    final String INITIAL_POINT = "randomAroundWindMiddleToEdges";
+    // One of: greedy, weightedGreedy, mst, clusteringMst, clusteringWeightedGreedy, optimalPath
+    final String INITIAL_STRATEGY = "weightedGreedy";
+    private String strategy;
 
     // Enable or disable different Weighted Greedy params, to compare results.
     final boolean WG_SCORE_ENABLED = true;
@@ -45,54 +48,66 @@ public class Player extends sail.sim.Player {
         gen = new Random(seed);
         this.numTargets = t;
         this.windDirection = windDirection;
-        
+
+        this.strategy = INITIAL_STRATEGY;
         if(this.numTargets >= 500){
-        	STRATEGY = "greedy";
+        	this.strategy = "greedy";
         }
         
         switch (INITIAL_POINT) {
-        case "random":
-            initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
-            break;
-        case "middle":
-            initialLocation = new Point(5.0, 5.0);
-            break;
-        case "windMiddle":
-            // The middle point wrt the wind lies in the line that follows the wind vector, upwind direction,
-            // at 1/3 of the distance from the center (5,5) to the edges of the board.
-            // To compute it, first we need the unit vector that represents the wind direction.
-            Point unitWind = Point.getUnitVector(windDirection);
-
-            // Now, we need the distance of the edges of the board in this direction. If the angle of the wind
-            // wrt to the x-axis is multiple of 90º, then the solution is trivial, since the distance is 5 km.
-            // For the rest of the cases, we need some trigonometry.
-            Point xAxisVector = new Point(1,0);
-
-            // Rotate the wind so that it is a vector in the first quadrant. This works because of symmetry and
-            // it helps to simplify things.
-            Point absUnitWind = new Point(Math.abs(unitWind.x), Math.abs(unitWind.y));
-
-            double alpha = Point.angleBetweenVectors(xAxisVector, absUnitWind);
-            double distanceToEdge = 5.0;
-            if (alpha <= Math.PI / 4) { // alpha <= 45º
-                distanceToEdge /= Math.cos(alpha);
-            } else { // 45º < alpha <= 90º
-                distanceToEdge /= Math.sin(alpha);
-            }
-
-            // Now we have everything we need.
-            initialLocation = new Point(
-                    5 + (1./3 * distanceToEdge) * unitWind.x,
-                    5 + (1./3 * distanceToEdge) * unitWind.y
-            );
-            break;
-        default:
-            System.err.println("Invalid initial point "+INITIAL_POINT+" chosen");
-            initialLocation = new Point(0, 0);
-    }
+            case "random":
+                initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+                break;
+            case "middle":
+                initialLocation = new Point(5.0, 5.0);
+                break;
+            case "windMiddleToEdges":
+                initialLocation = getWindMiddleToEdges(this.windDirection);
+                break;
+            case "randomAroundWindMiddleToEdges":
+                Point windMiddleToEdges = getWindMiddleToEdges(this.windDirection);
+                initialLocation = new Point(
+                        windMiddleToEdges.x + gen.nextDouble(),
+                        windMiddleToEdges.y + gen.nextDouble()
+                );
+                break;
+            default:
+                System.err.println("Invalid initial point "+INITIAL_POINT+" chosen");
+                initialLocation = new Point(0, 0);
+        }
         // initialLocation = new Point(5.0, 5.0); // Use the middle point as initial location.
         currentLocation = new Point(initialLocation.x, initialLocation.y);
         return initialLocation;
+    }
+
+    private Point getWindMiddleToEdges(Point windDirection) {
+        // The middle point wrt the wind lies in the line that follows the wind vector, upwind direction,
+        // at 1/3 of the distance from the center (5,5) to the edges of the board.
+        // To compute it, first we need the unit vector that represents the wind direction.
+        Point unitWind = Point.getUnitVector(windDirection);
+
+        // Now, we need the distance of the edges of the board in this direction. If the angle of the wind
+        // wrt to the x-axis is multiple of 90º, then the solution is trivial, since the distance is 5 km.
+        // For the rest of the cases, we need some trigonometry.
+        Point xAxisVector = new Point(1,0);
+
+        // Rotate the wind so that it is a vector in the first quadrant. This works because of symmetry and
+        // it helps to simplify things.
+        Point absUnitWind = new Point(Math.abs(unitWind.x), Math.abs(unitWind.y));
+
+        double alpha = Point.angleBetweenVectors(xAxisVector, absUnitWind);
+        double distanceToEdge = 5.0;
+        if (alpha <= Math.PI / 4) { // alpha <= 45º
+            distanceToEdge /= Math.cos(alpha);
+        } else { // 45º < alpha <= 90º
+            distanceToEdge /= Math.sin(alpha);
+        }
+
+        // Now we have everything we need.
+        return new Point(
+                5 + (1./3 * distanceToEdge) * unitWind.x,
+                5 + (1./3 * distanceToEdge) * unitWind.y
+        );
     }
 
     @Override
@@ -119,7 +134,7 @@ public class Player extends sail.sim.Player {
             this.playerVisitsByTarget.put(targetId, playerVisits);
         }
         
-        if(STRATEGY == "mst"){
+        if(this.strategy== "mst"){
         	ArrayList<Point> targetsClone = new ArrayList<Point>();
         	for(Point target: targets){
         		targetsClone.add(target);
@@ -142,7 +157,7 @@ public class Player extends sail.sim.Player {
 	        path.remove(0);
         }
         
-        else if(STRATEGY == "clusteringMst"){
+        else if(this.strategy== "clusteringMst"){
         	graph = new double[numTargets][numTargets];
 	        for(int i = 0; i < numTargets; i++){
 	        	for(int j = 0; j < numTargets; j++){
@@ -154,7 +169,7 @@ public class Player extends sail.sim.Player {
 	        computePathInCluster();
 	    }
         
-        else if(STRATEGY == "clusteringWeightedGreedy"){
+        else if(this.strategy== "clusteringWeightedGreedy"){
         	graph = new double[numTargets][numTargets];
 	        for(int i = 0; i < numTargets; i++){
 	        	for(int j = 0; j < numTargets; j++){
@@ -212,11 +227,11 @@ public class Player extends sail.sim.Player {
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
         this.currentLocation = groupLocations.get(id);
         
-        if(unvisitedTargets.size() < 100){
-        	STRATEGY = "weightedGreedy";
-        }
+//        if(unvisitedTargets.size() < 100){
+//        	this.strategy= "weightedGreedy";
+//        }
         
-        switch (STRATEGY) {
+        switch (this.strategy) {
             case "greedy":
                 return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
             case "weightedGreedy":
@@ -228,7 +243,7 @@ public class Player extends sail.sim.Player {
             case "clusteringWeightedGreedy":
             	return clusteringWeightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
             default:
-                System.err.println("Invalid strategy "+STRATEGY+" chosen");
+                System.err.println("Invalid strategy "+this.strategy+" chosen");
                 return new Point(0,0);
         }
     }
