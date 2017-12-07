@@ -12,16 +12,11 @@ def save_float(x):
     except ValueError:
         return None
 
-primal_seed = 20171126
+primal_seed = 20171206
 env_vars = [
-    (5,   0.015, 1000,  10),
-    (25,  0.015, 2500,  10),
-    (100, 0.015, 10000, 10),
-    (500, 0.015, 50000, 10),
-
-    (5,   0.004, 1000,  10),
-    (25,  0.004, 2500,  10),
-    (100, 0.004, 10000, 10),
+    (5,   0.004, 1000,  50),
+    (25,  0.004, 2500,  30),
+    (100, 0.004, 10000, 20),
     (500, 0.004, 50000, 10)
 ]
 players = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6']
@@ -97,7 +92,7 @@ for num_targets, time_step, time_limit, repetition in env_vars:
         final_scores = scores['final_scores']
         time_remaining = scores['time_remaining']
 
-        print("%d,%d,%d,%.2f,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % (
+        print("%d,%d,%d,%.3f,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f" % (
             repetition,
             primal_seed,
             num_targets,
